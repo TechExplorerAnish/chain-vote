@@ -1,10 +1,10 @@
 use crate::errors::VotingError;
-use crate::security::verify_multisig_signers;
-use crate::state::{AdminMultisig, Election, ElectionPhase};
+use crate::security::hash_transition_phase_action;
+use crate::state::{AdminMultisig, Election, ElectionPhase, GovernanceAction, GovernanceProposal};
 use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
-#[instruction(next_phase: ElectionPhase)]
+#[instruction(next_phase: ElectionPhase, proposal_nonce: u64)]
 pub struct TransitionElectionPhase<'info> {
     #[account(
         mut,
@@ -21,25 +21,38 @@ pub struct TransitionElectionPhase<'info> {
     )]
     pub multisig: Account<'info, AdminMultisig>,
 
+    #[account(
+        mut,
+        seeds = [b"proposal", multisig.key().as_ref(), &proposal_nonce.to_le_bytes()],
+        bump = proposal.bump,
+        constraint = proposal.multisig == multisig.key() @ VotingError::InvalidElectionState,
+    )]
+    pub proposal: Account<'info, GovernanceProposal>,
+
     pub multisig_authority: Signer<'info>,
 
     pub admin: Signer<'info>,
 }
 
-pub fn handler(ctx: Context<TransitionElectionPhase>, next_phase: ElectionPhase) -> Result<()> {
-    let mut co_signer_keys = vec![ctx.accounts.multisig_authority.key()];
-    co_signer_keys.extend(
-        ctx.remaining_accounts
-            .iter()
-            .filter(|acc| acc.is_signer)
-            .map(|acc| acc.key()),
+pub fn handler(
+    ctx: Context<TransitionElectionPhase>,
+    next_phase: ElectionPhase,
+    proposal_nonce: u64,
+) -> Result<()> {
+    let proposal = &mut ctx.accounts.proposal;
+    require!(proposal_nonce == proposal.nonce, VotingError::InvalidNonce);
+    require!(proposal.executed, VotingError::ProposalNotExecutable);
+    require!(!proposal.consumed, VotingError::ProposalConsumed);
+    require!(
+        proposal.action == GovernanceAction::TransitionPhase,
+        VotingError::InvalidGovernanceAction
     );
 
-    verify_multisig_signers(
-        &ctx.accounts.multisig,
-        &ctx.accounts.admin.key(),
-        &co_signer_keys,
-    )?;
+    let expected_action_hash = hash_transition_phase_action(&ctx.accounts.election.key(), next_phase);
+    require!(
+        proposal.action_hash == expected_action_hash,
+        VotingError::InvalidActionHash
+    );
 
     let election = &mut ctx.accounts.election;
     let now = Clock::get()?.unix_timestamp;
@@ -65,9 +78,19 @@ pub fn handler(ctx: Context<TransitionElectionPhase>, next_phase: ElectionPhase)
     }
 
     if next_phase == ElectionPhase::Finalized {
+        require!(
+            election.final_tally_root_set,
+            VotingError::MissingFinalTallyRoot
+        );
+        require!(
+            election.total_revealed_votes == election.total_committed_votes,
+            VotingError::UnrevealedVotesRemaining
+        );
         election.is_revealed = true;
         election.finalized_at = now;
     }
+
+    proposal.consumed = true;
 
     emit!(ElectionPhaseTransitioned {
         election: election.key(),

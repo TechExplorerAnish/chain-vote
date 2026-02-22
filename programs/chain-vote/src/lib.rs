@@ -21,20 +21,46 @@ pub mod chain_vote {
         instructions::initialize_multisig::handler(ctx, admins, threshold)
     }
 
+    pub fn create_governance_proposal(
+        ctx: Context<CreateGovernanceProposal>,
+        nonce: u64,
+        action: state::GovernanceAction,
+        action_hash: [u8; 32],
+        expires_at: i64,
+    ) -> Result<()> {
+        instructions::create_governance_proposal::handler(
+            ctx,
+            nonce,
+            action,
+            action_hash,
+            expires_at,
+        )
+    }
+
+    pub fn approve_governance_proposal(ctx: Context<ApproveGovernanceProposal>) -> Result<()> {
+        instructions::approve_governance_proposal::handler(ctx)
+    }
+
+    pub fn execute_governance_proposal(ctx: Context<ExecuteGovernanceProposal>) -> Result<()> {
+        instructions::execute_governance_proposal::handler(ctx)
+    }
+
     pub fn initialize_election(
         ctx: Context<InitializeElection>,
+        proposal_nonce: u64,
         title: String,
         start_time: i64,
         end_time: i64,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, title, start_time, end_time)
+        instructions::initialize::handler(ctx, proposal_nonce, title, start_time, end_time)
     }
 
     pub fn transition_election_phase(
         ctx: Context<TransitionElectionPhase>,
         next_phase: state::ElectionPhase,
+        proposal_nonce: u64,
     ) -> Result<()> {
-        instructions::transition_phase::handler(ctx, next_phase)
+        instructions::transition_phase::handler(ctx, next_phase, proposal_nonce)
     }
 
     pub fn add_candidate(
@@ -64,5 +90,14 @@ pub mod chain_vote {
 
     pub fn reveal_results(ctx: Context<RevealResults>, candidate_index: u8) -> Result<()> {
         instructions::reveal_results::handler(ctx, candidate_index)
+    }
+
+    pub fn publish_tally_root(
+        ctx: Context<PublishTallyRoot>,
+        proposal_nonce: u64,
+        tally_root: [u8; 32],
+        proof_uri: String,
+    ) -> Result<()> {
+        instructions::publish_tally_root::handler(ctx, proposal_nonce, tally_root, proof_uri)
     }
 }

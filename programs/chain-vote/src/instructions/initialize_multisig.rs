@@ -21,9 +21,15 @@ pub struct InitializeMultisig<'info> {
 
 pub fn handler(ctx: Context<InitializeMultisig>, admins: Vec<Pubkey>, threshold: u8) -> Result<()> {
     require!(!admins.is_empty(), VotingError::InvalidMultisigConfig);
-    require!(admins.len() <= MAX_MULTISIG_ADMINS, VotingError::InvalidMultisigConfig);
+    require!(
+        admins.len() <= MAX_MULTISIG_ADMINS,
+        VotingError::InvalidMultisigConfig
+    );
     require!(threshold > 0, VotingError::InvalidMultisigConfig);
-    require!(threshold as usize <= admins.len(), VotingError::InvalidMultisigConfig);
+    require!(
+        threshold as usize <= admins.len(),
+        VotingError::InvalidMultisigConfig
+    );
 
     let mut unique_admins: Vec<Pubkey> = Vec::with_capacity(admins.len());
     for admin in admins {
@@ -41,6 +47,7 @@ pub fn handler(ctx: Context<InitializeMultisig>, admins: Vec<Pubkey>, threshold:
     }
     multisig.admin_count = unique_admins.len() as u8;
     multisig.threshold = threshold;
+    multisig.proposal_nonce = 0;
     multisig.bump = ctx.bumps.multisig;
 
     emit!(MultisigInitialized {

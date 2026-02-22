@@ -65,6 +65,9 @@ pub fn handler(ctx: Context<RevealResults>, candidate_index: u8) -> Result<()> {
         candidate_votes: candidate.revealed_votes,
         total_candidates: election.candidate_count,
         phase: election.phase,
+        final_tally_root_set: election.final_tally_root_set,
+        final_tally_root: election.final_tally_root,
+        proof_uri: election.proof_uri.clone(),
         published_at: now,
     });
 
@@ -79,5 +82,8 @@ pub struct ResultsPublished {
     pub candidate_votes: u64,
     pub total_candidates: u8,
     pub phase: ElectionPhase,
+    pub final_tally_root_set: bool,
+    pub final_tally_root: [u8; 32],
+    pub proof_uri: String,
     pub published_at: i64,
 }

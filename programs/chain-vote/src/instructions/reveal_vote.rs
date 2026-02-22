@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 #[instruction(candidate_index: u8)]
 pub struct RevealVote<'info> {
     #[account(
+        mut,
         seeds = [b"election", election.admin.as_ref()],
         bump = election.bump,
     )]
@@ -42,14 +43,23 @@ pub struct RevealVote<'info> {
 }
 
 pub fn handler(ctx: Context<RevealVote>, candidate_index: u8, salt: [u8; 32]) -> Result<()> {
-    let election = &ctx.accounts.election;
+    let election = &mut ctx.accounts.election;
     let now = Clock::get()?.unix_timestamp;
 
-    require!(election.phase == ElectionPhase::RevealPhase, VotingError::InvalidElectionState);
-    require!(ctx.accounts.whitelist_entry.is_active, VotingError::NotWhitelisted);
+    require!(
+        election.phase == ElectionPhase::RevealPhase,
+        VotingError::InvalidElectionState
+    );
+    require!(
+        ctx.accounts.whitelist_entry.is_active,
+        VotingError::NotWhitelisted
+    );
 
     let voter_record = &mut ctx.accounts.voter_record;
-    require!(voter_record.has_committed, VotingError::InvalidElectionState);
+    require!(
+        voter_record.has_committed,
+        VotingError::InvalidElectionState
+    );
     require!(!voter_record.has_revealed, VotingError::AlreadyVoted);
 
     let nonce_bytes = voter_record.nonce.to_le_bytes();
@@ -62,7 +72,10 @@ pub fn handler(ctx: Context<RevealVote>, candidate_index: u8, salt: [u8; 32]) ->
     hasher.update(salt);
     let expected: [u8; 32] = hasher.finalize().into();
 
-    require!(expected == voter_record.commitment, VotingError::InvalidCommitment);
+    require!(
+        expected == voter_record.commitment,
+        VotingError::InvalidCommitment
+    );
 
     let candidate = &mut ctx.accounts.candidate;
     candidate.encrypted_votes = candidate
@@ -79,6 +92,11 @@ pub fn handler(ctx: Context<RevealVote>, candidate_index: u8, salt: [u8; 32]) ->
     voter_record.has_revealed = true;
     voter_record.revealed_at = now;
     voter_record.candidate_index = candidate_index;
+
+    election.total_revealed_votes = election
+        .total_revealed_votes
+        .checked_add(1)
+        .ok_or(VotingError::Overflow)?;
 
     emit!(VoteRevealed {
         election: election.key(),

@@ -6,6 +6,7 @@ use anchor_lang::prelude::*;
 #[instruction(_commitment: [u8; 32], _nonce: u64)]
 pub struct CastVote<'info> {
     #[account(
+        mut,
         seeds = [b"election", election.admin.as_ref()],
         bump = election.bump,
     )]
@@ -35,7 +36,7 @@ pub struct CastVote<'info> {
 }
 
 pub fn handler(ctx: Context<CastVote>, commitment: [u8; 32], nonce: u64) -> Result<()> {
-    let election = &ctx.accounts.election;
+    let election = &mut ctx.accounts.election;
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
@@ -65,6 +66,11 @@ pub fn handler(ctx: Context<CastVote>, commitment: [u8; 32], nonce: u64) -> Resu
     voter_record.revealed_at = 0;
     voter_record.candidate_index = u8::MAX;
     voter_record.bump = ctx.bumps.voter_record;
+
+    election.total_committed_votes = election
+        .total_committed_votes
+        .checked_add(1)
+        .ok_or(VotingError::Overflow)?;
 
     emit!(VoteCommitted {
         election: election.key(),

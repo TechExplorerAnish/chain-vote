@@ -56,6 +56,30 @@ pub enum VotingError {
     #[msg("Invalid multisig configuration")]
     InvalidMultisigConfig,
 
+    #[msg("Governance proposal has expired")]
+    ProposalExpired,
+
+    #[msg("Signer has already approved this proposal")]
+    ProposalAlreadyApproved,
+
+    #[msg("Proposal has not reached threshold")]
+    ProposalNotExecutable,
+
+    #[msg("Proposal already consumed")]
+    ProposalConsumed,
+
+    #[msg("Invalid governance action")]
+    InvalidGovernanceAction,
+
+    #[msg("Invalid governance action hash")]
+    InvalidActionHash,
+
+    #[msg("Final tally root not committed")]
+    MissingFinalTallyRoot,
+
+    #[msg("Not all committed votes are revealed")]
+    UnrevealedVotesRemaining,
+
     #[msg("Election title is too long")]
     TitleTooLong,
 

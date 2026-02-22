@@ -1,9 +1,10 @@
 use crate::errors::VotingError;
-use crate::security::verify_multisig_signers;
-use crate::state::{AdminMultisig, Election, ElectionPhase};
+use crate::security::hash_initialize_election_action;
+use crate::state::{AdminMultisig, Election, ElectionPhase, GovernanceAction, GovernanceProposal};
 use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
+#[instruction(proposal_nonce: u64)]
 pub struct InitializeElection<'info> {
     #[account(
         init,
@@ -20,6 +21,14 @@ pub struct InitializeElection<'info> {
     )]
     pub multisig: Account<'info, AdminMultisig>,
 
+    #[account(
+        mut,
+        seeds = [b"proposal", multisig.key().as_ref(), &proposal_nonce.to_le_bytes()],
+        bump = proposal.bump,
+        constraint = proposal.multisig == multisig.key() @ VotingError::InvalidElectionState,
+    )]
+    pub proposal: Account<'info, GovernanceProposal>,
+
     pub multisig_authority: Signer<'info>,
 
     #[account(mut)]
@@ -30,23 +39,19 @@ pub struct InitializeElection<'info> {
 
 pub fn handler(
     ctx: Context<InitializeElection>,
+    proposal_nonce: u64,
     title: String,
     start_time: i64,
     end_time: i64,
 ) -> Result<()> {
-    let mut co_signer_keys = vec![ctx.accounts.multisig_authority.key()];
-    co_signer_keys.extend(
-        ctx.remaining_accounts
-            .iter()
-            .filter(|acc| acc.is_signer)
-            .map(|acc| acc.key()),
+    let proposal = &mut ctx.accounts.proposal;
+    require!(proposal_nonce == proposal.nonce, VotingError::InvalidNonce);
+    require!(proposal.executed, VotingError::ProposalNotExecutable);
+    require!(!proposal.consumed, VotingError::ProposalConsumed);
+    require!(
+        proposal.action == GovernanceAction::InitializeElection,
+        VotingError::InvalidGovernanceAction
     );
-
-    verify_multisig_signers(
-        &ctx.accounts.multisig,
-        &ctx.accounts.admin.key(),
-        &co_signer_keys,
-    )?;
 
     require!(
         title.len() <= Election::MAX_TITLE_LEN,
@@ -60,6 +65,13 @@ pub fn handler(
         VotingError::StartTimeInPast
     );
 
+    let expected_action_hash =
+        hash_initialize_election_action(&ctx.accounts.admin.key(), &title, start_time, end_time);
+    require!(
+        proposal.action_hash == expected_action_hash,
+        VotingError::InvalidActionHash
+    );
+
     let election = &mut ctx.accounts.election;
     election.multisig = ctx.accounts.multisig.key();
     election.admin = ctx.accounts.admin.key();
@@ -68,10 +80,17 @@ pub fn handler(
     election.end_time = end_time;
     election.phase = ElectionPhase::Created;
     election.candidate_count = 0;
+    election.total_committed_votes = 0;
+    election.total_revealed_votes = 0;
+    election.final_tally_root = [0; 32];
+    election.final_tally_root_set = false;
+    election.proof_uri = String::new();
     election.is_revealed = false;
     election.revealed_at = 0;
     election.finalized_at = 0;
     election.bump = ctx.bumps.election;
+
+    proposal.consumed = true;
 
     emit!(ElectionInitialized {
         election: election.key(),
