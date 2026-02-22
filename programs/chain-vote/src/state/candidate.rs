@@ -2,25 +2,20 @@ use anchor_lang::prelude::*;
 
 #[account]
 pub struct Candidate {
-    pub election: Pubkey,     // which election this candidate belongs to
-    pub name: String,         // candidate name
-    pub party: String,        // candidate party
-    pub index: u8,            // candidate index in the election
-    pub encrypted_votes: u64, // number of votes this candidate received (encrypted)
-    pub revealed_votes: u64,  // shown after reveal phase
-    pub bumb: u8,             // PDA bump seed for this account
+    pub election: Pubkey,
+    pub name: String,
+    pub party: String,
+    pub index: u8,
+    pub encrypted_votes: u64,
+    pub revealed_votes: u64,
+    pub is_revealed: bool,
+    pub bump: u8,
 }
 
 impl Candidate {
-    // calculate how much storage space this account needs
-    // 8 bytes for account discriminator
+    pub const MAX_NAME_LEN: usize = 100;
+    pub const MAX_PARTY_LEN: usize = 100;
 
-    pub const LEN: usize = 8 + // discriminator
-        32 + // election
-        (4 + 100) + // name (string with max length of 100)
-        (4 + 100) + // party (string with max length of 100)
-        1 + // index
-        8 + // encrypted_votes
-        8 + // revealed_votes
-        1; // bumb
+    pub const LEN: usize =
+        8 + 32 + (4 + Self::MAX_NAME_LEN) + (4 + Self::MAX_PARTY_LEN) + 1 + 8 + 8 + 1 + 1;
 }

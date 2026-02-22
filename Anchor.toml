@@ -8,6 +8,9 @@ skip-lint = false
 [programs.localnet]
 chain_vote = "9JHuSg8vw8JNZ8RpyugiPejCSeY77uVs9ghRTfLe57cg"
 
+[programs.devnet]
+chain_vote = "9JHuSg8vw8JNZ8RpyugiPejCSeY77uVs9ghRTfLe57cg"
+
 [registry]
 url = "https://api.apr.dev"
 
