@@ -38,6 +38,7 @@ import {
 } from "@/hooks/use-admin";
 import { GovernanceAction, ElectionPhase, PHASE_LABELS } from "@/lib/types";
 import { getMultisigPda, getElectionPda, getProposalPda } from "@/lib/pda";
+import { parseError } from "@/lib/utils";
 
 export default function AdminPage() {
     const { connected, publicKey } = useWallet();
@@ -170,9 +171,8 @@ function MultisigSection() {
             const tx = await initialize(adminKeys, thresholdValue);
             toast.success("Multisig initialized!", { description: `Tx: ${tx.slice(0, 16)}…` });
         } catch (err) {
-            toast.error("Failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
-            });
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
         }
     }, [publicKey, adminsInput, threshold, initialize]);
 
@@ -238,9 +238,8 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
             toast.success("Election initialized!", { description: `Tx: ${tx.slice(0, 16)}…` });
             refetch();
         } catch (err) {
-            toast.error("Failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
-            });
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
         }
     }, [publicKey, msAuthority, proposalNonce, title, startTime, endTime, initializeElection, refetch]);
 
@@ -359,6 +358,11 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
     const [actionType, setActionType] = useState<string>("");
     const [expiryHours, setExpiryHours] = useState("24");
 
+    // Election details for InitializeElection proposal
+    const [electionTitle, setElectionTitle] = useState("");
+    const [electionStartTime, setElectionStartTime] = useState("");
+    const [electionEndTime, setElectionEndTime] = useState("");
+
     // Approve/Execute
     const [proposalNonceInput, setProposalNonceInput] = useState("0");
 
@@ -374,16 +378,33 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const [multisigPda] = getMultisigPda(msAuth);
             const action = parseInt(actionType, 10) as GovernanceAction;
 
+            const nonceBigInt = BigInt(proposalNonceInput);
+            if (nonceBigInt < 0n) {
+                toast.error("Invalid proposal nonce", {
+                    description: "Nonce must be 0 or greater.",
+                });
+                return;
+            }
+
             // Compute action hash based on type
             let actionHash: Uint8Array;
             if (action === GovernanceAction.InitializeElection) {
-                // Hash uses admin + title + times — for now, use a placeholder
-                // In production, these should be provided via form
+                // Validate election details are provided
+                if (!electionTitle || !electionStartTime || !electionEndTime) {
+                    toast.error("Election details required", {
+                        description: "Provide title, start time, and end time for InitializeElection proposal",
+                    });
+                    return;
+                }
+
+                const startTimeUnix = BigInt(Math.floor(new Date(electionStartTime).getTime() / 1000));
+                const endTimeUnix = BigInt(Math.floor(new Date(electionEndTime).getTime() / 1000));
+
                 actionHash = await hashInitializeElectionAction(
                     publicKey,
-                    "Election",
-                    BigInt(0),
-                    BigInt(0)
+                    electionTitle,
+                    startTimeUnix,
+                    endTimeUnix
                 );
             } else if (action === GovernanceAction.TransitionPhase) {
                 const [elPda] = getElectionPda(new PublicKey(adminKey));
@@ -403,16 +424,13 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             );
 
             // We need current nonce from multisig — use 0 as default
-            const nonce = BigInt(proposalNonceInput);
-
-            const tx = await createProposal(multisigPda, nonce, action, actionHash, expiresAt);
+            const tx = await createProposal(multisigPda, nonceBigInt, action, actionHash, expiresAt);
             toast.success("Proposal created!", { description: `Tx: ${tx.slice(0, 16)}…` });
         } catch (err) {
-            toast.error("Failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
-            });
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
         }
-    }, [publicKey, msAuthority, actionType, nextPhase, expiryHours, proposalNonceInput, adminKey, createProposal]);
+    }, [publicKey, msAuthority, actionType, nextPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime]);
 
     const handleApprove = useCallback(async () => {
         if (!publicKey || !msAuthority) return;
@@ -422,9 +440,8 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const tx = await approveProposal(multisigPda, proposalPda);
             toast.success("Proposal approved!", { description: `Tx: ${tx.slice(0, 16)}…` });
         } catch (err) {
-            toast.error("Failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
-            });
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
         }
     }, [publicKey, msAuthority, proposalNonceInput, approveProposal]);
 
@@ -436,14 +453,28 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const tx = await executeProposal(multisigPda, proposalPda);
             toast.success("Proposal executed!", { description: `Tx: ${tx.slice(0, 16)}…` });
         } catch (err) {
-            toast.error("Failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
-            });
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
         }
     }, [publicKey, msAuthority, proposalNonceInput, executeProposal]);
 
     const handleTransition = useCallback(async () => {
-        if (!publicKey || !nextPhase || !msAuthority) return;
+        if (!publicKey) {
+            toast.error("Wallet not connected", { description: "Connect your wallet to continue." });
+            return;
+        }
+        if (!msAuthority) {
+            toast.error("Missing multisig authority", { description: "Enter the multisig authority key." });
+            return;
+        }
+        if (!nextPhase) {
+            toast.error("Missing target phase", { description: "Select the target phase to transition to." });
+            return;
+        }
+        if (!transNonce) {
+            toast.error("Missing proposal nonce", { description: "Enter the transition proposal nonce." });
+            return;
+        }
         try {
             const phase = parseInt(nextPhase, 10) as ElectionPhase;
             const tx = await transitionPhase(
@@ -455,9 +486,8 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             toast.success("Phase transitioned!", { description: `Tx: ${tx.slice(0, 16)}…` });
             refetchElection();
         } catch (err) {
-            toast.error("Failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
-            });
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
         }
     }, [publicKey, nextPhase, msAuthority, adminKey, transNonce, transitionPhase, refetchElection]);
 
@@ -504,6 +534,37 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {parseInt(actionType, 10) === GovernanceAction.InitializeElection && (
+                        <>
+                            <div className="space-y-2">
+                                <Label>Election Title</Label>
+                                <Input
+                                    value={electionTitle}
+                                    onChange={(e) => setElectionTitle(e.target.value)}
+                                    placeholder="Election title"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Start Time</Label>
+                                    <Input
+                                        type="datetime-local"
+                                        value={electionStartTime}
+                                        onChange={(e) => setElectionStartTime(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>End Time</Label>
+                                    <Input
+                                        type="datetime-local"
+                                        value={electionEndTime}
+                                        onChange={(e) => setElectionEndTime(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </>
+                    )}
 
                     <div className="space-y-2">
                         <Label>Expiry (hours)</Label>
@@ -596,13 +657,24 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
 function CandidateSection({ adminKey }: { adminKey: string }) {
     const { addCandidate, loading } = useAddCandidate();
     const { election, refetch } = useElectionAccount(adminKey);
-    const { publicKey } = useWallet();
+    const { publicKey, connected } = useWallet();
 
     const [name, setName] = useState("");
     const [party, setParty] = useState("");
 
     const handleAdd = useCallback(async () => {
-        if (!publicKey || !election) return;
+        if (!publicKey || !connected) {
+            toast.error("Wallet Not Connected", {
+                description: "Please connect your wallet first.",
+            });
+            return;
+        }
+        if (!election) {
+            toast.error("Election Not Found", {
+                description: "Please verify the admin key.",
+            });
+            return;
+        }
         try {
             const index = election.candidateCount;
             const tx = await addCandidate(new PublicKey(adminKey), name, party, index);
@@ -611,14 +683,13 @@ function CandidateSection({ adminKey }: { adminKey: string }) {
             setParty("");
             refetch();
         } catch (err) {
-            toast.error("Failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
-            });
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
         }
-    }, [publicKey, election, adminKey, name, party, addCandidate, refetch]);
+    }, [publicKey, connected, election, adminKey, name, party, addCandidate, refetch]);
 
     const canAdd =
-        election?.phase === ElectionPhase.RegistrationPhase;
+        election?.phase === ElectionPhase.RegistrationPhase && connected;
 
     return (
         <Card>
@@ -634,10 +705,17 @@ function CandidateSection({ adminKey }: { adminKey: string }) {
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                {!canAdd && (
+                {!connected && (
                     <Alert>
                         <AlertDescription>
-                            Candidates can only be added during Registration phase.
+                            Please connect your wallet to add candidates.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {connected && !canAdd && election && (
+                    <Alert>
+                        <AlertDescription>
+                            Candidates can only be added during Registration phase. Current phase: {PHASE_LABELS[election.phase] || "Unknown"}
                         </AlertDescription>
                     </Alert>
                 )}
@@ -648,7 +726,7 @@ function CandidateSection({ adminKey }: { adminKey: string }) {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="Candidate name"
-                            disabled={!canAdd}
+                            disabled={!canAdd || loading}
                         />
                     </div>
                     <div className="space-y-2">
@@ -657,11 +735,11 @@ function CandidateSection({ adminKey }: { adminKey: string }) {
                             value={party}
                             onChange={(e) => setParty(e.target.value)}
                             placeholder="Party name"
-                            disabled={!canAdd}
+                            disabled={!canAdd || loading}
                         />
                     </div>
                 </div>
-                <Button onClick={handleAdd} disabled={loading || !canAdd}>
+                <Button onClick={handleAdd} disabled={loading || !canAdd || !connected}>
                     {loading ? "Adding…" : "Add Candidate"}
                 </Button>
             </CardContent>
@@ -674,12 +752,17 @@ function CandidateSection({ adminKey }: { adminKey: string }) {
 function VoterSection({ adminKey }: { adminKey: string }) {
     const { registerVoter, loading } = useRegisterVoter();
     const { election } = useElectionAccount(adminKey);
-    const { publicKey } = useWallet();
+    const { publicKey, connected } = useWallet();
 
     const [voterKey, setVoterKey] = useState("");
 
     const handleRegister = useCallback(async () => {
-        if (!publicKey) return;
+        if (!publicKey || !connected) {
+            toast.error("Wallet Not Connected", {
+                description: "Please connect your wallet first.",
+            });
+            return;
+        }
         try {
             const tx = await registerVoter(
                 new PublicKey(adminKey),
@@ -688,14 +771,13 @@ function VoterSection({ adminKey }: { adminKey: string }) {
             toast.success("Voter registered!", { description: `Tx: ${tx.slice(0, 16)}…` });
             setVoterKey("");
         } catch (err) {
-            toast.error("Failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
-            });
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
         }
-    }, [publicKey, adminKey, voterKey, registerVoter]);
+    }, [publicKey, connected, adminKey, voterKey, registerVoter]);
 
     const canRegister =
-        election?.phase === ElectionPhase.RegistrationPhase;
+        election?.phase === ElectionPhase.RegistrationPhase && connected;
 
     return (
         <Card>
@@ -706,10 +788,31 @@ function VoterSection({ adminKey }: { adminKey: string }) {
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                {!canRegister && (
+                {!connected && (
+                    <Alert>
+                        <AlertDescription>
+                            Please connect your wallet to register voters.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {!election && (
+                    <Alert>
+                        <AlertDescription>
+                            Election not found. Please verify the admin key.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {connected && election && !election?.phase && (
                     <Alert>
                         <AlertDescription>
                             Voters can only be registered during Registration phase.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {connected && election && election?.phase !== ElectionPhase.RegistrationPhase && (
+                    <Alert>
+                        <AlertDescription>
+                            Voters can only be registered during Registration phase. Current phase: {PHASE_LABELS[election.phase] || "Unknown"}
                         </AlertDescription>
                     </Alert>
                 )}
@@ -720,10 +823,10 @@ function VoterSection({ adminKey }: { adminKey: string }) {
                         onChange={(e) => setVoterKey(e.target.value)}
                         placeholder="Voter wallet address"
                         className="font-mono text-xs"
-                        disabled={!canRegister}
+                        disabled={!canRegister || loading}
                     />
                 </div>
-                <Button onClick={handleRegister} disabled={loading || !canRegister}>
+                <Button onClick={handleRegister} disabled={loading || !canRegister || !connected}>
                     {loading ? "Registering…" : "Register Voter"}
                 </Button>
             </CardContent>

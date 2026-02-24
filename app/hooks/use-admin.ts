@@ -18,6 +18,7 @@ import {
     hashPublishTallyRootAction,
 } from "@/lib/crypto";
 import { ElectionPhase, GovernanceAction } from "@/lib/types";
+import { parseError } from "@/lib/utils";
 
 /* ── PRODUCTION UTILITIES ──────────────────────────────────── */
 
@@ -49,6 +50,12 @@ function validateWalletConnection(wallet: any): {
 } {
     if (!wallet) {
         throw new Error("Wallet is not connected. Please connect your wallet first.");
+    }
+
+    if (!wallet.connected) {
+        throw new Error(
+            "Wallet is not connected. Please click the wallet button to connect your Phantom wallet."
+        );
     }
 
     if (!wallet.publicKey) {
@@ -121,10 +128,10 @@ export function useInitializeMultisig() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to initialize multisig";
-                setError(msg);
+                const { description } = parseError(err);
+                setError(description);
                 console.error("Initialize multisig error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
@@ -183,10 +190,10 @@ export function useCreateProposal() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to create proposal";
-                setError(msg);
+                const { title, description } = parseError(err);
+                setError(description);
                 console.error("Create proposal error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
@@ -228,10 +235,10 @@ export function useApproveProposal() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to approve proposal";
-                setError(msg);
+                const { description } = parseError(err);
+                setError(description);
                 console.error("Approve proposal error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
@@ -273,10 +280,10 @@ export function useExecuteProposal() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to execute proposal";
-                setError(msg);
+                const { description } = parseError(err);
+                setError(description);
                 console.error("Execute proposal error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
@@ -336,10 +343,10 @@ export function usePhaseTransition() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to transition phase";
-                setError(msg);
+                const { description } = parseError(err);
+                setError(description);
                 console.error("Phase transition error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
@@ -403,10 +410,10 @@ export function useAddCandidate() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to add candidate";
-                setError(msg);
+                const { description } = parseError(err);
+                setError(description);
                 console.error("Add candidate error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
@@ -454,10 +461,10 @@ export function useRegisterVoter() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to register voter";
-                setError(msg);
+                const { description } = parseError(err);
+                setError(description);
                 console.error("Register voter error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
@@ -507,6 +514,15 @@ export function useInitializeElection() {
                 const [multisigPda] = getMultisigPda(multisigAuthority);
                 const [proposalPda] = getProposalPda(multisigPda, proposalNonce);
 
+                // Ensure proposal account exists before initializing election
+                const connection = getConnection();
+                const proposalInfo = await connection.getAccountInfo(proposalPda);
+                if (!proposalInfo) {
+                    throw new Error(
+                        "Proposal account not found. Ensure you used the same multisig authority and proposal nonce from the created proposal."
+                    );
+                }
+
                 const tx = await program.methods
                     .initializeElection(
                         new BN(proposalNonce.toString()),
@@ -526,10 +542,10 @@ export function useInitializeElection() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to initialize election";
-                setError(msg);
+                const { description } = parseError(err);
+                setError(description);
                 console.error("Initialize election error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
@@ -591,10 +607,10 @@ export function usePublishTallyRoot() {
 
                 return tx;
             } catch (err) {
-                const msg = err instanceof Error ? err.message : "Failed to publish tally root";
-                setError(msg);
+                const { description } = parseError(err);
+                setError(description);
                 console.error("Publish tally root error:", err);
-                throw err;
+                throw new Error(description);
             } finally {
                 setLoading(false);
             }
