@@ -6,12 +6,16 @@ import PhaseBadge from "@/components/phase-badge";
 import Countdown from "@/components/countdown";
 import type { ElectionAccount } from "@/lib/types";
 import { ElectionPhase } from "@/lib/types";
+import { useRegisteredVoters } from "@/hooks/use-registered-voters";
 
 interface Props {
     election: ElectionAccount;
+    electionPda?: string;
 }
 
-export default function ElectionOverview({ election }: Props) {
+export default function ElectionOverview({ election, electionPda }: Props) {
+    const { voterCount, committedCount, revealedCount, loading } = useRegisteredVoters(electionPda);
+
     const now = Math.floor(Date.now() / 1000);
     const startSec = Number(election.startTime);
     const endSec = Number(election.endTime);
@@ -23,7 +27,13 @@ export default function ElectionOverview({ election }: Props) {
                 <PhaseBadge phase={election.phase} />
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-5">
+                    <div>
+                        <p className="text-muted-foreground">Registered Voters</p>
+                        <p className="font-semibold">
+                            {loading ? "..." : voterCount}
+                        </p>
+                    </div>
                     <div>
                         <p className="text-muted-foreground">Candidates</p>
                         <p className="font-semibold">{election.candidateCount}</p>

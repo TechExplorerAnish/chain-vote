@@ -20,6 +20,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PhaseBadge from "@/components/phase-badge";
+import VoterManagementDashboard from "@/components/voter-management-dashboard";
 import { useElectionAccount } from "@/hooks/use-election-account";
 import {
     useInitializeMultisig,
@@ -104,7 +105,14 @@ export default function AdminPage() {
                 </TabsContent>
 
                 <TabsContent value="voters" className="mt-4">
-                    <VoterSection adminKey={adminKeyInput} />
+                    <div className="space-y-4">
+                        <VoterSection adminKey={adminKeyInput} />
+                        {adminKeyInput && (
+                            <VoterManagementDashboard
+                                electionPda={getElectionPda(new PublicKey(adminKeyInput))[0].toBase58()}
+                            />
+                        )}
+                    </div>
                 </TabsContent>
             </Tabs>
         </div>

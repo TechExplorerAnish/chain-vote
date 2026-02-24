@@ -2,6 +2,8 @@ export { useElectionAccount } from "./use-election-account";
 export { useCommitVote } from "./use-commit-vote";
 export { useRevealVote } from "./use-reveal-vote";
 export { useVoterStatus } from "./use-voter-status";
+export { useRegisteredVoters } from "./use-registered-voters";
+export { useTransaction } from "./use-transaction";
 export {
     useInitializeMultisig,
     useCreateProposal,
