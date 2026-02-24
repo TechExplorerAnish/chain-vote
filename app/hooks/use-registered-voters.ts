@@ -12,10 +12,11 @@ export interface RegisteredVoter {
     revealedAt?: bigint;
 }
 
-export function useRegisteredVoters(electionPda: string | undefined) {
+export function useRegisteredVoters(electionPda: string | undefined, externalTrigger?: number) {
     const [voters, setVoters] = useState<RegisteredVoter[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [refetchTrigger, setRefetchTrigger] = useState(0);
 
     useEffect(() => {
         if (!electionPda) return;
@@ -89,7 +90,7 @@ export function useRegisteredVoters(electionPda: string | undefined) {
         };
 
         fetchVoters();
-    }, [electionPda]);
+    }, [electionPda, refetchTrigger, externalTrigger]);
 
     const voterCount = voters.length;
     const committedCount = voters.filter((v) => v.hasCommitted).length;
@@ -103,10 +104,7 @@ export function useRegisteredVoters(electionPda: string | undefined) {
         loading,
         error,
         refetch: () => {
-            if (electionPda) {
-                setVoters([]);
-                setLoading(true);
-            }
+            setRefetchTrigger(prev => prev + 1);
         },
     };
 }

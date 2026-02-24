@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PhaseBadge from "@/components/phase-badge";
 import VoterManagementDashboard from "@/components/voter-management-dashboard";
 import { useElectionAccount } from "@/hooks/use-election-account";
+import { useRegisteredVoters } from "@/hooks/use-registered-voters";
 import {
     useInitializeMultisig,
     useCreateProposal,
@@ -105,14 +106,7 @@ export default function AdminPage() {
                 </TabsContent>
 
                 <TabsContent value="voters" className="mt-4">
-                    <div className="space-y-4">
-                        <VoterSection adminKey={adminKeyInput} />
-                        {adminKeyInput && (
-                            <VoterManagementDashboard
-                                electionPda={getElectionPda(new PublicKey(adminKeyInput))[0].toBase58()}
-                            />
-                        )}
-                    </div>
+                    <VotersTabContent adminKey={adminKeyInput} />
                 </TabsContent>
             </Tabs>
         </div>
@@ -757,7 +751,7 @@ function CandidateSection({ adminKey }: { adminKey: string }) {
 
 /* ── Voter Registration ──────────────────────────────────── */
 
-function VoterSection({ adminKey }: { adminKey: string }) {
+function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVoterRegistered?: () => void }) {
     const { registerVoter, loading } = useRegisterVoter();
     const { election } = useElectionAccount(adminKey);
     const { publicKey, connected } = useWallet();
@@ -778,11 +772,14 @@ function VoterSection({ adminKey }: { adminKey: string }) {
             );
             toast.success("Voter registered!", { description: `Tx: ${tx.slice(0, 16)}…` });
             setVoterKey("");
+            if (onVoterRegistered) {
+                onVoterRegistered();
+            }
         } catch (err) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, connected, adminKey, voterKey, registerVoter]);
+    }, [publicKey, connected, adminKey, voterKey, registerVoter, onVoterRegistered]);
 
     const canRegister =
         election?.phase === ElectionPhase.RegistrationPhase && connected;
@@ -839,5 +836,27 @@ function VoterSection({ adminKey }: { adminKey: string }) {
                 </Button>
             </CardContent>
         </Card>
+    );
+}
+
+/* ── Voters Tab Wrapper ──────────────────────────────────── */
+
+function VotersTabContent({ adminKey }: { adminKey: string }) {
+    const [refetchTrigger, setRefetchTrigger] = useState(0);
+
+    const handleVoterRegistered = useCallback(() => {
+        setRefetchTrigger(prev => prev + 1);
+    }, []);
+
+    return (
+        <div className="space-y-4">
+            <VoterSection adminKey={adminKey} onVoterRegistered={handleVoterRegistered} />
+            {adminKey && (
+                <VoterManagementDashboard
+                    electionPda={getElectionPda(new PublicKey(adminKey))[0].toBase58()}
+                    refetchTrigger={refetchTrigger}
+                />
+            )}
+        </div>
     );
 }

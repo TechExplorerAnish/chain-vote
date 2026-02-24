@@ -5,14 +5,24 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRegisteredVoters } from "@/hooks/use-registered-voters";
+import { useEffect, useState } from "react";
 
 interface Props {
     electionPda: string;
+    refetchTrigger?: number;
 }
 
-export default function VoterManagementDashboard({ electionPda }: Props) {
+export default function VoterManagementDashboard({ electionPda, refetchTrigger }: Props) {
+    const [internalTrigger, setInternalTrigger] = useState(0);
+
+    useEffect(() => {
+        if (refetchTrigger !== undefined) {
+            setInternalTrigger(refetchTrigger);
+        }
+    }, [refetchTrigger]);
+
     const { voters, voterCount, committedCount, revealedCount, loading, error } =
-        useRegisteredVoters(electionPda);
+        useRegisteredVoters(electionPda, internalTrigger);
 
     if (loading) {
         return (
