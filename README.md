@@ -200,4 +200,4 @@ solana config set --url devnet
 
 ## License
 
-Specify your chosen license in this repository (for example, MIT or Apache-2.0).
+MIT 
