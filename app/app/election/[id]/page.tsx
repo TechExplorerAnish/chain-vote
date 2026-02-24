@@ -5,6 +5,7 @@ import { useElectionAccount } from "@/hooks/use-election-account";
 import { useVoterStatus } from "@/hooks/use-voter-status";
 import { useElectionEvents } from "@/hooks/use-event-subscription";
 import ElectionOverview from "@/components/election-overview";
+import PhaseTiming from "@/components/phase-timing";
 import CandidateList from "@/components/candidate-list";
 import CommitForm from "@/components/commit-form";
 import RevealForm from "@/components/reveal-form";
@@ -61,6 +62,7 @@ export default function ElectionPage() {
     return (
         <div className="mx-auto max-w-4xl space-y-6 p-6">
             <ElectionOverview election={election} electionPda={adminKey} />
+            <PhaseTiming election={election} />
 
             <Tabs defaultValue="candidates">
                 <TabsList>

@@ -20,6 +20,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PhaseBadge from "@/components/phase-badge";
+import PhaseTiming from "@/components/phase-timing";
 import VoterManagementDashboard from "@/components/voter-management-dashboard";
 import { useElectionAccount } from "@/hooks/use-election-account";
 import { useRegisteredVoters } from "@/hooks/use-registered-voters";
@@ -248,38 +249,41 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
     return (
         <div className="space-y-4">
             {election && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center justify-between">
-                            <span>Current Election</span>
-                            <PhaseBadge phase={election.phase} />
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Title</span>
-                            <span>{election.title}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Candidates</span>
-                            <span>{election.candidateCount}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Committed</span>
-                            <span>{election.totalCommittedVotes.toString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Revealed</span>
-                            <span>{election.totalRevealedVotes.toString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Tally Root</span>
-                            <Badge variant={election.finalTallyRootSet ? "default" : "outline"}>
-                                {election.finalTallyRootSet ? "Set" : "Pending"}
-                            </Badge>
-                        </div>
-                    </CardContent>
-                </Card>
+                <>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center justify-between">
+                                <span>Current Election</span>
+                                <PhaseBadge phase={election.phase} />
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Title</span>
+                                <span>{election.title}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Candidates</span>
+                                <span>{election.candidateCount}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Committed</span>
+                                <span>{election.totalCommittedVotes.toString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Revealed</span>
+                                <span>{election.totalRevealedVotes.toString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Tally Root</span>
+                                <Badge variant={election.finalTallyRootSet ? "default" : "outline"}>
+                                    {election.finalTallyRootSet ? "Set" : "Pending"}
+                                </Badge>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <PhaseTiming election={election} />
+                </>
             )}
 
             {!election && !elLoading && (
