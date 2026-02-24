@@ -52,12 +52,6 @@ function validateWalletConnection(wallet: any): {
         throw new Error("Wallet is not connected. Please connect your wallet first.");
     }
 
-    if (!wallet.connected) {
-        throw new Error(
-            "Wallet is not connected. Please click the wallet button to connect your Phantom wallet."
-        );
-    }
-
     if (!wallet.publicKey) {
         throw new Error(
             "Wallet public key is unavailable. This may indicate a wallet adapter issue."
