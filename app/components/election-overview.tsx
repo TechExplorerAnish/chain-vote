@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import PhaseBadge from "@/components/phase-badge";
@@ -14,9 +15,16 @@ interface Props {
 }
 
 export default function ElectionOverview({ election, electionPda }: Props) {
+    const [mounted, setMounted] = useState(false);
+    const [now, setNow] = useState(0);
+
+    useEffect(() => {
+        setNow(Math.floor(Date.now() / 1000));
+        setMounted(true);
+    }, []);
+
     const { voterCount, committedCount, revealedCount, loading } = useRegisteredVoters(electionPda);
 
-    const now = Math.floor(Date.now() / 1000);
     const startSec = Number(election.startTime);
     const endSec = Number(election.endTime);
 
@@ -59,7 +67,7 @@ export default function ElectionOverview({ election, electionPda }: Props) {
                 <div className="flex flex-wrap gap-4">
                     {election.phase === ElectionPhase.VotingPhase && (
                         <>
-                            {now < startSec && (
+                            {mounted && now < startSec && (
                                 <Countdown
                                     targetTime={election.startTime}
                                     label="Voting starts in"

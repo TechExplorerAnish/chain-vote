@@ -1,10 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import WalletButton from "@/components/wallet-button";
 import ThemeToggle from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
+
+const WalletButton = dynamic(() => import("@/components/wallet-button"), {
+    ssr: false,
+});
 
 const NAV_ITEMS = [
     { href: "/", label: "Home" },

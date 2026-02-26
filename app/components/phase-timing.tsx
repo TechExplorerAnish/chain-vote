@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +12,14 @@ interface Props {
 }
 
 export default function PhaseTiming({ election }: Props) {
-    const now = Math.floor(Date.now() / 1000);
+    const [mounted, setMounted] = useState(false);
+    const [now, setNow] = useState(0);
+
+    useEffect(() => {
+        setNow(Math.floor(Date.now() / 1000));
+        setMounted(true);
+    }, []);
+
     const startSec = Number(election.startTime);
     const endSec = Number(election.endTime);
 
@@ -44,7 +52,7 @@ export default function PhaseTiming({ election }: Props) {
         return "pending";
     };
 
-    const registrationDuration = startSec - Math.floor(Date.now() / 1000);
+    const registrationDuration = mounted ? startSec - now : 0;
     const votingDuration = endSec - startSec;
 
     return (
@@ -77,14 +85,14 @@ export default function PhaseTiming({ election }: Props) {
                             </div>
                             {election.phase === ElectionPhase.RegistrationPhase && registrationDuration > 0 && (
                                 <span className="text-sm text-amber-600 font-medium">
-                                    Ends in {formatDuration(registrationDuration)}
+                                    Ends in {mounted ? formatDuration(registrationDuration) : "–"}
                                 </span>
                             )}
                         </div>
                         <div className="text-xs text-muted-foreground space-y-1 pl-2">
                             <p>Start: Now (when phase transitions from Created)</p>
                             <p>End: {formatDateTime(startSec)}</p>
-                            <p>Duration: ~{formatDuration(registrationDuration > 0 ? registrationDuration : startSec - Math.floor(Date.now() / 1000))}</p>
+                            <p>Duration: ~{mounted ? formatDuration(registrationDuration > 0 ? registrationDuration : 0) : "–"}</p>
                         </div>
                     </div>
 
@@ -111,7 +119,7 @@ export default function PhaseTiming({ election }: Props) {
                             </div>
                             {election.phase === ElectionPhase.VotingPhase && endSec > now && (
                                 <span className="text-sm text-amber-600 font-medium">
-                                    Ends in {formatDuration(endSec - now)}
+                                    Ends in {mounted ? formatDuration(endSec - now) : "–"}
                                 </span>
                             )}
                         </div>
@@ -180,7 +188,7 @@ export default function PhaseTiming({ election }: Props) {
                 <Alert className="mt-4">
                     <AlertDescription>
                         <strong>Current Phase:</strong> {PHASE_LABELS[election.phase]} •{" "}
-                        <strong>Current Time:</strong> {formatDateTime(now)}
+                        <strong>Current Time:</strong> {mounted ? formatDateTime(now) : "–"}
                     </AlertDescription>
                 </Alert>
             </CardContent>

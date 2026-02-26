@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PhaseBadge from "@/components/phase-badge";
 import PhaseTiming from "@/components/phase-timing";
 import VoterManagementDashboard from "@/components/voter-management-dashboard";
+import { VoterConfirmationDialog } from "@/components/voter-confirmation-dialog";
 import { useElectionAccount } from "@/hooks/use-election-account";
 import { useRegisteredVoters } from "@/hooks/use-registered-voters";
 import {
@@ -374,7 +375,9 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
 
     // Transition
     const [nextPhase, setNextPhase] = useState<string>("");
-    const [transNonce, setTransNonce] = useState("0");
+
+    // For transition, use the same nonce as the proposal
+    const transNonce = proposalNonceInput;
 
     const handleCreateProposal = useCallback(async () => {
         if (!publicKey || !msAuthority || !actionType) return;
@@ -638,14 +641,9 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label>Transition Proposal Nonce</Label>
-                        <Input
-                            type="number"
-                            value={transNonce}
-                            onChange={(e) => setTransNonce(e.target.value)}
-                        />
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Note: Uses the "Proposal Nonce" value from above ({proposalNonceInput})
+                    </p>
                     <Button
                         onClick={handleTransition}
                         disabled={transitionLoading}
@@ -761,21 +759,46 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
     const { publicKey, connected } = useWallet();
 
     const [voterKey, setVoterKey] = useState("");
+    const [showConfirmation, setShowConfirmation] = useState(false);
+    const [voterAuditLog, setVoterAuditLog] = useState<Array<{ address: string; action: string; timestamp: number; admin: string }>>();
 
-    const handleRegister = useCallback(async () => {
+    const handleRegisterClick = useCallback(() => {
         if (!publicKey || !connected) {
             toast.error("Wallet Not Connected", {
                 description: "Please connect your wallet first.",
             });
             return;
         }
+        if (!voterKey.trim()) {
+            toast.error("Empty Voter Address", {
+                description: "Please enter a valid voter public key.",
+            });
+            return;
+        }
+        setShowConfirmation(true);
+    }, [publicKey, connected, voterKey]);
+
+    const handleConfirmRegister = useCallback(async () => {
+        if (!publicKey || !connected) return;
         try {
             const tx = await registerVoter(
                 new PublicKey(adminKey),
                 new PublicKey(voterKey)
             );
             toast.success("Voter registered!", { description: `Tx: ${tx.slice(0, 16)}…` });
+
+            // Log to audit trail
+            const auditEntry = {
+                address: voterKey,
+                action: "registered",
+                timestamp: Math.floor(Date.now() / 1000),
+                admin: publicKey.toBase58(),
+            };
+            setVoterAuditLog(prev => [...(prev || []), auditEntry]);
+            localStorage.setItem(`audit_log_${adminKey}`, JSON.stringify([...(voterAuditLog || []), auditEntry]));
+
             setVoterKey("");
+            setShowConfirmation(false);
             if (onVoterRegistered) {
                 onVoterRegistered();
             }
@@ -783,7 +806,7 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, connected, adminKey, voterKey, registerVoter, onVoterRegistered]);
+    }, [publicKey, connected, adminKey, voterKey, registerVoter, onVoterRegistered, voterAuditLog]);
 
     const canRegister =
         election?.phase === ElectionPhase.RegistrationPhase && connected;
@@ -835,9 +858,18 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
                         disabled={!canRegister || loading}
                     />
                 </div>
-                <Button onClick={handleRegister} disabled={loading || !canRegister || !connected}>
+                <Button onClick={handleRegisterClick} disabled={loading || !canRegister || !connected}>
                     {loading ? "Registering…" : "Register Voter"}
                 </Button>
+
+                <VoterConfirmationDialog
+                    open={showConfirmation}
+                    voterAddress={voterKey}
+                    onConfirm={handleConfirmRegister}
+                    onCancel={() => setShowConfirmation(false)}
+                    isLoading={loading}
+                    type="register"
+                />
             </CardContent>
         </Card>
     );
@@ -859,6 +891,7 @@ function VotersTabContent({ adminKey }: { adminKey: string }) {
                 <VoterManagementDashboard
                     electionPda={getElectionPda(new PublicKey(adminKey))[0].toBase58()}
                     refetchTrigger={refetchTrigger}
+                    adminKey={adminKey}
                 />
             )}
         </div>
