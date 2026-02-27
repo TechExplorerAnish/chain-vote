@@ -6,16 +6,12 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 import { useCommitVote } from "@/hooks/use-commit-vote";
 import type { CandidateAccount } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface Props {
     adminKey: string;
@@ -34,25 +30,22 @@ export default function CommitForm({
 }: Props) {
     const { connected } = useWallet();
     const { commitVote, loading } = useCommitVote();
-    const [selectedCandidate, setSelectedCandidate] = useState<string>("");
+    const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
+    const [confirming, setConfirming] = useState(false);
+
+    const selectedInfo = selectedCandidate !== null
+        ? candidates.find((c) => c.index === selectedCandidate)
+        : null;
 
     const handleCommit = useCallback(async () => {
-        if (!selectedCandidate) return;
+        if (selectedCandidate === null) return;
 
         try {
-            const idx = parseInt(selectedCandidate, 10);
-            const tx = await commitVote(new PublicKey(adminKey), idx);
+            const tx = await commitVote(new PublicKey(adminKey), selectedCandidate);
             toast.success("Vote committed!", {
-                description: `Tx: ${tx.slice(0, 16)}…`,
-                action: {
-                    label: "View",
-                    onClick: () =>
-                        window.open(
-                            `https://explorer.solana.com/tx/${tx}?cluster=devnet`,
-                            "_blank"
-                        ),
-                },
+                description: `Your encrypted ballot is now on-chain. Tx: ${tx.slice(0, 16)}…`,
             });
+            setConfirming(false);
             onSuccess();
         } catch (err) {
             toast.error("Commit failed", {
@@ -63,29 +56,91 @@ export default function CommitForm({
 
     if (!connected) {
         return (
-            <Alert>
-                <AlertDescription>Connect your wallet to vote.</AlertDescription>
-            </Alert>
+            <Card>
+                <CardContent className="py-8">
+                    <p className="text-center text-sm text-muted-foreground">
+                        Connect your wallet to cast your vote.
+                    </p>
+                </CardContent>
+            </Card>
         );
     }
 
     if (!isWhitelisted) {
         return (
-            <Alert>
-                <AlertDescription>
-                    Your wallet is not whitelisted for this election.
-                </AlertDescription>
-            </Alert>
+            <Card>
+                <CardContent className="py-8">
+                    <p className="text-center text-sm text-muted-foreground">
+                        Your wallet is not registered for this election. Contact the election admin.
+                    </p>
+                </CardContent>
+            </Card>
         );
     }
 
     if (hasCommitted) {
         return (
-            <Alert>
-                <AlertDescription>
-                    You have already committed your vote. Wait for the reveal phase.
-                </AlertDescription>
-            </Alert>
+            <Card>
+                <CardContent className="space-y-3 py-8 text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                        <span className="text-xl">✓</span>
+                    </div>
+                    <p className="font-medium">Vote Committed</p>
+                    <p className="text-sm text-muted-foreground">
+                        Your encrypted vote is on-chain. You&apos;ll reveal it during the Reveal phase.
+                        <br />
+                        <span className="text-xs">
+                            Do not clear your browser data — your commitment secret is stored locally.
+                        </span>
+                    </p>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    // Confirmation step
+    if (confirming && selectedInfo) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Confirm Your Vote</CardTitle>
+                    <CardDescription>
+                        Please review your selection. Once committed, it cannot be changed.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="rounded-lg border-2 border-primary p-4 text-center">
+                        <p className="text-lg font-semibold">{selectedInfo.name}</p>
+                        <Badge variant="secondary" className="mt-1">{selectedInfo.party}</Badge>
+                    </div>
+
+                    <Alert>
+                        <AlertDescription className="text-xs">
+                            Your vote will be encrypted with a random nonce and salt.
+                            The secret is saved in your browser so you can reveal it later.
+                            <strong> Never clear your browser data before revealing.</strong>
+                        </AlertDescription>
+                    </Alert>
+
+                    <div className="flex gap-3">
+                        <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => setConfirming(false)}
+                            disabled={loading}
+                        >
+                            Go Back
+                        </Button>
+                        <Button
+                            className="flex-1"
+                            onClick={handleCommit}
+                            disabled={loading}
+                        >
+                            {loading ? "Committing…" : "Confirm & Commit"}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
         );
     }
 
@@ -94,32 +149,57 @@ export default function CommitForm({
             <CardHeader>
                 <CardTitle>Cast Your Vote</CardTitle>
                 <CardDescription>
-                    Select a candidate and commit your encrypted vote. Your choice is hidden until the reveal phase.
+                    Select the candidate you want to vote for. Your choice is encrypted until the Reveal phase.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <Select
-                    value={selectedCandidate}
-                    onValueChange={setSelectedCandidate}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select a candidate" />
-                    </SelectTrigger>
-                    <SelectContent>
+                {candidates.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                        No candidates registered yet.
+                    </p>
+                ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
                         {candidates.map((c) => (
-                            <SelectItem key={c.index} value={c.index.toString()}>
-                                {c.name} — {c.party}
-                            </SelectItem>
+                            <button
+                                key={c.index}
+                                type="button"
+                                onClick={() => setSelectedCandidate(c.index)}
+                                className={cn(
+                                    "flex flex-col items-start gap-1 rounded-lg border-2 p-4 text-left transition-colors",
+                                    selectedCandidate === c.index
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border hover:border-primary/50 hover:bg-accent"
+                                )}
+                            >
+                                <div className="flex w-full items-center justify-between">
+                                    <span className="font-semibold">{c.name}</span>
+                                    <div
+                                        className={cn(
+                                            "flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors",
+                                            selectedCandidate === c.index
+                                                ? "border-primary bg-primary"
+                                                : "border-muted-foreground/30"
+                                        )}
+                                    >
+                                        {selectedCandidate === c.index && (
+                                            <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                                        )}
+                                    </div>
+                                </div>
+                                <Badge variant="secondary" className="text-xs">{c.party}</Badge>
+                            </button>
                         ))}
-                    </SelectContent>
-                </Select>
+                    </div>
+                )}
+
+                <Separator />
 
                 <Button
-                    onClick={handleCommit}
-                    disabled={loading || !selectedCandidate}
+                    onClick={() => setConfirming(true)}
+                    disabled={selectedCandidate === null}
                     className="w-full"
                 >
-                    {loading ? "Committing…" : "Commit Vote"}
+                    {selectedCandidate === null ? "Select a candidate" : `Vote for ${selectedInfo?.name}`}
                 </Button>
             </CardContent>
         </Card>
