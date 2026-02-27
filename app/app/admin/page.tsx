@@ -36,10 +36,12 @@ import {
     useRegisterVoter,
     usePublishTallyRoot,
     useMultisigAccount,
+    useProposalAccount,
     hashInitializeElectionAction,
     hashTransitionPhaseAction,
     hashPublishTallyRootAction,
 } from "@/hooks/use-admin";
+import type { ProposalAccountData } from "@/hooks/use-admin";
 import { GovernanceAction, ElectionPhase, PHASE_LABELS } from "@/lib/types";
 import { getMultisigPda, getElectionPda, getProposalPda } from "@/lib/pda";
 import { parseError } from "@/lib/utils";
@@ -351,6 +353,136 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
 
 /* ── Governance Proposals ─────────────────────────────────── */
 
+const ACTION_LABELS: Record<GovernanceAction, string> = {
+    [GovernanceAction.InitializeElection]: "Initialize Election",
+    [GovernanceAction.TransitionPhase]: "Transition Phase",
+    [GovernanceAction.PublishTallyRoot]: "Publish Tally Root",
+};
+
+function ProposalStatusCard({
+    proposal,
+    proposalPda,
+    loading,
+    error,
+}: {
+    proposal: ProposalAccountData | null;
+    proposalPda: PublicKey | null;
+    loading: boolean;
+    error: string | null;
+}) {
+    if (loading) {
+        return (
+            <Card>
+                <CardContent className="py-4">
+                    <p className="text-sm text-muted-foreground">Loading proposal…</p>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    if (error) {
+        return (
+            <Card>
+                <CardContent className="py-4">
+                    <p className="text-sm text-muted-foreground">{error}</p>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    if (!proposal) return null;
+
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const isExpired = proposal.expiresAt > 0n && now > proposal.expiresAt;
+    const approvedCount = proposal.approvals.filter(Boolean).length;
+
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-base">
+                    <span>Proposal #{proposal.nonce.toString()}</span>
+                    <div className="flex gap-2">
+                        {proposal.executed && (
+                            <Badge variant="default">Executed</Badge>
+                        )}
+                        {proposal.consumed && (
+                            <Badge variant="secondary">Consumed</Badge>
+                        )}
+                        {!proposal.executed && !isExpired && (
+                            <Badge variant="outline">Pending</Badge>
+                        )}
+                        {isExpired && !proposal.executed && (
+                            <Badge variant="destructive">Expired</Badge>
+                        )}
+                    </div>
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Action</span>
+                    <Badge variant="outline">{ACTION_LABELS[proposal.action]}</Badge>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Proposer</span>
+                    <span className="font-mono text-xs">
+                        {proposal.proposer.toBase58().slice(0, 8)}…{proposal.proposer.toBase58().slice(-4)}
+                    </span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Approvals</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-medium">{approvedCount}</span>
+                        <div className="flex gap-1">
+                            {proposal.approvals.map((approved, i) => (
+                                <div
+                                    key={i}
+                                    className={`h-2 w-2 rounded-full ${approved
+                                        ? "bg-primary"
+                                        : "bg-muted"
+                                        }`}
+                                    title={`Admin ${i}: ${approved ? "Approved" : "Pending"}`}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Created</span>
+                    <span>{new Date(Number(proposal.createdAt) * 1000).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Expires</span>
+                    <span className={isExpired ? "text-destructive" : ""}>
+                        {new Date(Number(proposal.expiresAt) * 1000).toLocaleString()}
+                    </span>
+                </div>
+                {proposalPda && (
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">PDA</span>
+                        <span className="font-mono text-xs">
+                            {proposalPda.toBase58().slice(0, 12)}…{proposalPda.toBase58().slice(-4)}
+                        </span>
+                    </div>
+                )}
+                {proposal.executed && proposal.consumed && (
+                    <Alert>
+                        <AlertDescription>
+                            This proposal has been executed and consumed. It cannot be used again.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {proposal.executed && !proposal.consumed && (
+                    <Alert>
+                        <AlertDescription>
+                            This proposal is executed and ready to be consumed by its target instruction.
+                        </AlertDescription>
+                    </Alert>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
 function GovernanceSection({ adminKey }: { adminKey: string }) {
     const { publicKey } = useWallet();
     const { createProposal, loading: createLoading } = useCreateProposal();
@@ -378,6 +510,26 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
 
     // For transition, use the same nonce as the proposal
     const transNonce = proposalNonceInput;
+
+    // ── Auto-fetch proposal status when authority + nonce are set ──
+    const {
+        proposal,
+        proposalPda,
+        loading: proposalLoading,
+        error: proposalError,
+        fetchProposal,
+    } = useProposalAccount(msAuthority || undefined, proposalNonceInput);
+
+    useEffect(() => {
+        if (msAuthority && proposalNonceInput !== "") {
+            try {
+                new PublicKey(msAuthority); // validate key format
+                fetchProposal();
+            } catch {
+                // invalid key, skip
+            }
+        }
+    }, [msAuthority, proposalNonceInput, fetchProposal]);
 
     const handleCreateProposal = useCallback(async () => {
         if (!publicKey || !msAuthority || !actionType) return;
@@ -435,11 +587,12 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             // We need current nonce from multisig — use 0 as default
             const tx = await createProposal(multisigPda, nonceBigInt, action, actionHash, expiresAt);
             toast.success("Proposal created!", { description: `Tx: ${tx.slice(0, 16)}…` });
+            fetchProposal();
         } catch (err) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, msAuthority, actionType, nextPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime]);
+    }, [publicKey, msAuthority, actionType, nextPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime, fetchProposal]);
 
     const handleApprove = useCallback(async () => {
         if (!publicKey || !msAuthority) return;
@@ -448,11 +601,12 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const [proposalPda] = getProposalPda(multisigPda, BigInt(proposalNonceInput));
             const tx = await approveProposal(multisigPda, proposalPda);
             toast.success("Proposal approved!", { description: `Tx: ${tx.slice(0, 16)}…` });
+            fetchProposal();
         } catch (err) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, msAuthority, proposalNonceInput, approveProposal]);
+    }, [publicKey, msAuthority, proposalNonceInput, approveProposal, fetchProposal]);
 
     const handleExecute = useCallback(async () => {
         if (!publicKey || !msAuthority) return;
@@ -461,11 +615,12 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const [proposalPda] = getProposalPda(multisigPda, BigInt(proposalNonceInput));
             const tx = await executeProposal(multisigPda, proposalPda);
             toast.success("Proposal executed!", { description: `Tx: ${tx.slice(0, 16)}…` });
+            fetchProposal();
         } catch (err) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, msAuthority, proposalNonceInput, executeProposal]);
+    }, [publicKey, msAuthority, proposalNonceInput, executeProposal, fetchProposal]);
 
     const handleTransition = useCallback(async () => {
         if (!publicKey) {
@@ -521,6 +676,14 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                     onChange={(e) => setProposalNonceInput(e.target.value)}
                 />
             </div>
+
+            {/* Live proposal status */}
+            <ProposalStatusCard
+                proposal={proposal}
+                proposalPda={proposalPda}
+                loading={proposalLoading}
+                error={proposalError}
+            />
 
             <Separator />
 
@@ -594,18 +757,27 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             <Card>
                 <CardHeader>
                     <CardTitle>Approve & Execute</CardTitle>
+                    {proposal && (
+                        <CardDescription>
+                            {proposal.executed && proposal.consumed
+                                ? "This proposal has already been executed and consumed."
+                                : proposal.executed
+                                    ? "This proposal has been executed. Ready to be consumed."
+                                    : `${proposal.approvalCount} approval(s) recorded.`}
+                        </CardDescription>
+                    )}
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-3">
                     <Button
                         variant="secondary"
                         onClick={handleApprove}
-                        disabled={approveLoading}
+                        disabled={approveLoading || proposal?.executed === true}
                     >
                         {approveLoading ? "Approving…" : "Approve Proposal"}
                     </Button>
                     <Button
                         onClick={handleExecute}
-                        disabled={executeLoading}
+                        disabled={executeLoading || proposal?.executed === true}
                     >
                         {executeLoading ? "Executing…" : "Execute Proposal"}
                     </Button>

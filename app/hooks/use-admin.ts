@@ -657,6 +657,92 @@ export function useMultisigAccount(authorityKey: string | undefined) {
     return { multisig, multisigPda, loading, fetchMultisig };
 }
 
+/* ── Proposal Account Fetch ───────────────────────────────── */
+
+function parseActionFromAnchor(actionObj: unknown): GovernanceAction {
+    if (typeof actionObj === "number") return actionObj;
+    if (actionObj && typeof actionObj === "object") {
+        if ("initializeElection" in actionObj) return GovernanceAction.InitializeElection;
+        if ("transitionPhase" in actionObj) return GovernanceAction.TransitionPhase;
+        if ("publishTallyRoot" in actionObj) return GovernanceAction.PublishTallyRoot;
+    }
+    return GovernanceAction.InitializeElection;
+}
+
+export interface ProposalAccountData {
+    multisig: PublicKey;
+    proposer: PublicKey;
+    action: GovernanceAction;
+    actionHash: number[];
+    nonce: bigint;
+    approvals: boolean[];
+    approvalCount: number;
+    executed: boolean;
+    consumed: boolean;
+    createdAt: bigint;
+    expiresAt: bigint;
+    bump: number;
+}
+
+export function useProposalAccount(
+    authorityKey: string | undefined,
+    nonce: string | undefined
+) {
+    const wallet = useAnchorWallet();
+    const [proposal, setProposal] = useState<ProposalAccountData | null>(null);
+    const [proposalPda, setProposalPda] = useState<PublicKey | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchProposal = useCallback(async () => {
+        if (!authorityKey || nonce === undefined || nonce === "") {
+            setProposal(null);
+            setProposalPda(null);
+            setError(null);
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        try {
+            const authority = new PublicKey(authorityKey);
+            const [multisigPda] = getMultisigPda(authority);
+            const nonceBigInt = BigInt(nonce);
+            const [pda] = getProposalPda(multisigPda, nonceBigInt);
+            setProposalPda(pda);
+
+            const program = wallet
+                ? getProgram(getProvider(wallet))
+                : (() => { throw new Error("Wallet required"); })();
+
+            const account = await program.account.governanceProposal.fetch(pda);
+
+            const adminCount = (account.approvals as boolean[]).length;
+            setProposal({
+                multisig: account.multisig as PublicKey,
+                proposer: account.proposer as PublicKey,
+                action: parseActionFromAnchor(account.action),
+                actionHash: account.actionHash as number[],
+                nonce: BigInt((account.nonce as { toString(): string }).toString()),
+                approvals: (account.approvals as boolean[]).slice(0, adminCount),
+                approvalCount: account.approvalCount as number,
+                executed: account.executed as boolean,
+                consumed: account.consumed as boolean,
+                createdAt: BigInt((account.createdAt as { toString(): string }).toString()),
+                expiresAt: BigInt((account.expiresAt as { toString(): string }).toString()),
+                bump: account.bump as number,
+            });
+        } catch {
+            setProposal(null);
+            setError("Proposal not found on-chain");
+        } finally {
+            setLoading(false);
+        }
+    }, [authorityKey, nonce, wallet]);
+
+    return { proposal, proposalPda, loading, error, fetchProposal };
+}
+
 /* ── Helpers ─────────────────────────────────────────────── */
 
 // Convert TS GovernanceAction → Anchor enum object

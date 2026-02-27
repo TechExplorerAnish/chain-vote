@@ -15,6 +15,7 @@ export {
     useInitializeElection,
     usePublishTallyRoot,
     useMultisigAccount,
+    useProposalAccount,
 } from "./use-admin";
 export {
     useEventSubscription,
