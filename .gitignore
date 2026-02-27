@@ -5,3 +5,9 @@ target
 node_modules
 test-ledger
 .yarn
+*_*.md
+*.txt
+*.sh
+wallet.json
+.env 
+.env.local

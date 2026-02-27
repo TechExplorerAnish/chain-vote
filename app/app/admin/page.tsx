@@ -502,10 +502,13 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
     const [electionStartTime, setElectionStartTime] = useState("");
     const [electionEndTime, setElectionEndTime] = useState("");
 
+    // Phase for TransitionPhase proposal creation (hash input)
+    const [proposalPhase, setProposalPhase] = useState<string>("");
+
     // Approve/Execute
     const [proposalNonceInput, setProposalNonceInput] = useState("0");
 
-    // Transition
+    // Transition execution
     const [nextPhase, setNextPhase] = useState<string>("");
 
     // For transition, use the same nonce as the proposal
@@ -568,8 +571,14 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                     endTimeUnix
                 );
             } else if (action === GovernanceAction.TransitionPhase) {
+                if (!proposalPhase) {
+                    toast.error("Target phase required", {
+                        description: "Select the target phase for the TransitionPhase proposal.",
+                    });
+                    return;
+                }
                 const [elPda] = getElectionPda(new PublicKey(adminKey));
-                const phase = parseInt(nextPhase || "1", 10) as ElectionPhase;
+                const phase = parseInt(proposalPhase, 10) as ElectionPhase;
                 actionHash = await hashTransitionPhaseAction(elPda, phase);
             } else {
                 const [elPda] = getElectionPda(new PublicKey(adminKey));
@@ -592,7 +601,7 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, msAuthority, actionType, nextPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime, fetchProposal]);
+    }, [publicKey, msAuthority, actionType, proposalPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime, fetchProposal]);
 
     const handleApprove = useCallback(async () => {
         if (!publicKey || !msAuthority) return;
@@ -639,8 +648,33 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             toast.error("Missing proposal nonce", { description: "Enter the transition proposal nonce." });
             return;
         }
+
+        const phase = parseInt(nextPhase, 10) as ElectionPhase;
+
+        // ── Client-side hash pre-check ──
+        // Compute the expected action hash and compare to what's stored in the
+        // proposal BEFORE sending the transaction.  This catches mismatches caused
+        // by re-using a proposal that was created for a different target phase.
+        if (proposal) {
+            const [elPda] = getElectionPda(new PublicKey(adminKey));
+            const expectedHash = await hashTransitionPhaseAction(elPda, phase);
+            const storedHash = new Uint8Array(proposal.actionHash);
+            const hashesMatch =
+                expectedHash.length === storedHash.length &&
+                expectedHash.every((b, i) => b === storedHash[i]);
+
+            if (!hashesMatch) {
+                toast.error("Action hash mismatch", {
+                    description:
+                        `Proposal #${transNonce} was created for a different target phase. ` +
+                        `Create a new TransitionPhase proposal with "${PHASE_LABELS[phase]}" selected.`,
+                    duration: 8000,
+                });
+                return;
+            }
+        }
+
         try {
-            const phase = parseInt(nextPhase, 10) as ElectionPhase;
             const tx = await transitionPhase(
                 new PublicKey(adminKey),
                 new PublicKey(msAuthority),
@@ -653,7 +687,7 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, nextPhase, msAuthority, adminKey, transNonce, transitionPhase, refetchElection]);
+    }, [publicKey, nextPhase, msAuthority, adminKey, transNonce, proposal, transitionPhase, refetchElection]);
 
     return (
         <div className="space-y-4">
@@ -706,6 +740,27 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {parseInt(actionType, 10) === GovernanceAction.TransitionPhase && (
+                        <div className="space-y-2">
+                            <Label>Target Phase (for action hash)</Label>
+                            <Select value={proposalPhase} onValueChange={setProposalPhase}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select target phase" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {[1, 2, 3, 4].map((p) => (
+                                        <SelectItem key={p} value={p.toString()}>
+                                            {PHASE_LABELS[p as ElectionPhase]}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                This must match the phase you transition to later.
+                            </p>
+                        </div>
+                    )}
 
                     {parseInt(actionType, 10) === GovernanceAction.InitializeElection && (
                         <>
