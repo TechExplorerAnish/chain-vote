@@ -10,6 +10,7 @@ import CandidateList from "@/components/candidate-list";
 import CommitForm from "@/components/commit-form";
 import RevealForm from "@/components/reveal-form";
 import ResultsTable from "@/components/results-table";
+import VoterStatusBanner from "@/components/voter-status-banner";
 import ElectionSkeleton from "@/components/election-skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,37 +54,45 @@ export default function ElectionPage() {
         );
     }
 
-    const showCommit = election.phase === ElectionPhase.VotingPhase;
-    const showReveal = election.phase === ElectionPhase.RevealPhase;
-    const showResults =
-        election.phase === ElectionPhase.RevealPhase ||
-        election.phase === ElectionPhase.Finalized;
+    const isVoting = election.phase === ElectionPhase.VotingPhase;
+    const isReveal = election.phase === ElectionPhase.RevealPhase;
+    const showResults = isReveal || election.phase === ElectionPhase.Finalized;
+
+    // Determine default tab based on phase
+    const defaultTab = isVoting
+        ? "vote"
+        : isReveal
+            ? "reveal"
+            : showResults
+                ? "results"
+                : "candidates";
 
     return (
         <div className="mx-auto max-w-4xl space-y-6 p-6">
+            {/* Header: election info */}
             <ElectionOverview election={election} electionPda={adminKey} />
-            <PhaseTiming election={election} />
 
-            <Tabs defaultValue="candidates">
+            {/* Voter status progress */}
+            <VoterStatusBanner
+                phase={election.phase}
+                isWhitelisted={voterStatus.isWhitelisted}
+                hasCommitted={voterStatus.hasCommitted}
+                hasRevealed={voterStatus.hasRevealed}
+                hasLocalSecret={voterStatus.hasLocalSecret}
+                loading={voterStatus.loading}
+            />
+
+            {/* All content in tabs */}
+            <Tabs defaultValue={defaultTab}>
                 <TabsList>
-                    <TabsTrigger value="candidates">Candidates</TabsTrigger>
-                    {showCommit && <TabsTrigger value="vote">Vote</TabsTrigger>}
-                    {showReveal && <TabsTrigger value="reveal">Reveal</TabsTrigger>}
+                    {isVoting && <TabsTrigger value="vote">Vote</TabsTrigger>}
+                    {isReveal && <TabsTrigger value="reveal">Reveal</TabsTrigger>}
                     {showResults && <TabsTrigger value="results">Results</TabsTrigger>}
+                    <TabsTrigger value="candidates">Candidates</TabsTrigger>
+                    <TabsTrigger value="timeline">Timeline</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="candidates" className="mt-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Registered Candidates</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <CandidateList candidates={candidates} />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {showCommit && (
+                {isVoting && (
                     <TabsContent value="vote" className="mt-4">
                         <CommitForm
                             adminKey={adminKey}
@@ -98,7 +107,7 @@ export default function ElectionPage() {
                     </TabsContent>
                 )}
 
-                {showReveal && (
+                {isReveal && (
                     <TabsContent value="reveal" className="mt-4">
                         <RevealForm
                             adminKey={adminKey}
@@ -118,6 +127,21 @@ export default function ElectionPage() {
                         <ResultsTable election={election} candidates={candidates} />
                     </TabsContent>
                 )}
+
+                <TabsContent value="candidates" className="mt-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Registered Candidates</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <CandidateList candidates={candidates} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="timeline" className="mt-4">
+                    <PhaseTiming election={election} />
+                </TabsContent>
             </Tabs>
         </div>
     );
