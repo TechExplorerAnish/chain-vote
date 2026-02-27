@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { useCommitVote } from "@/hooks/use-commit-vote";
+import Countdown from "@/components/countdown";
 import type { CandidateAccount } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,8 @@ interface Props {
     candidates: CandidateAccount[];
     isWhitelisted: boolean;
     hasCommitted: boolean;
+    startTime: bigint;
+    endTime: bigint;
     onSuccess: () => void;
 }
 
@@ -26,6 +29,8 @@ export default function CommitForm({
     candidates,
     isWhitelisted,
     hasCommitted,
+    startTime,
+    endTime,
     onSuccess,
 }: Props) {
     const { connected } = useWallet();
@@ -92,6 +97,40 @@ export default function CommitForm({
                         <span className="text-xs">
                             Do not clear your browser data — your commitment secret is stored locally.
                         </span>
+                    </p>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    // Time-based guards: the program enforces start_time / end_time
+    const nowSec = Math.floor(Date.now() / 1000);
+    const startSec = Number(startTime);
+    const endSec = Number(endTime);
+
+    if (nowSec < startSec) {
+        return (
+            <Card>
+                <CardContent className="space-y-3 py-8 text-center">
+                    <p className="font-medium">Voting hasn&apos;t started yet</p>
+                    <p className="text-sm text-muted-foreground">
+                        The election is in the Voting phase, but the voting window opens at{" "}
+                        <span className="font-mono text-xs">
+                            {new Date(startSec * 1000).toLocaleString()}
+                        </span>
+                    </p>
+                    <Countdown targetTime={startTime} label="Opens in" />
+                </CardContent>
+            </Card>
+        );
+    }
+
+    if (nowSec > endSec) {
+        return (
+            <Card>
+                <CardContent className="py-8">
+                    <p className="text-center text-sm text-muted-foreground">
+                        The voting window has closed.
                     </p>
                 </CardContent>
             </Card>

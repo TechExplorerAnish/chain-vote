@@ -99,6 +99,8 @@ export default function ElectionPage() {
                             candidates={candidates}
                             isWhitelisted={voterStatus.isWhitelisted}
                             hasCommitted={voterStatus.hasCommitted}
+                            startTime={election.startTime}
+                            endTime={election.endTime}
                             onSuccess={() => {
                                 voterStatus.refetch();
                                 refetch();

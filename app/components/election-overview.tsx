@@ -68,10 +68,10 @@ export default function ElectionOverview({ election, electionPda }: Props) {
                             )}
                             {(election.phase === ElectionPhase.RevealPhase ||
                                 election.phase === ElectionPhase.Finalized) && (
-                                <span className="text-xs text-muted-foreground">
-                                    Ended {new Date(endSec * 1000).toLocaleDateString()}
-                                </span>
-                            )}
+                                    <span className="text-xs text-muted-foreground">
+                                        Ended {new Date(endSec * 1000).toLocaleDateString()}
+                                    </span>
+                                )}
                         </div>
                     </div>
                 </div>

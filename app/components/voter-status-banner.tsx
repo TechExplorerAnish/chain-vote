@@ -102,31 +102,28 @@ export default function VoterStatusBanner({
                             <div key={step.key} className="flex flex-1 items-center gap-2">
                                 {i > 0 && (
                                     <div
-                                        className={`h-px flex-1 ${
-                                            stepsDone[i - 1] ? "bg-primary" : "bg-border"
-                                        }`}
+                                        className={`h-px flex-1 ${stepsDone[i - 1] ? "bg-primary" : "bg-border"
+                                            }`}
                                     />
                                 )}
                                 <div className="flex flex-col items-center gap-1">
                                     <div
-                                        className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors ${
-                                            done
+                                        className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors ${done
                                                 ? "border-primary bg-primary text-primary-foreground"
                                                 : isActive
                                                     ? "border-primary text-primary"
                                                     : "border-muted text-muted-foreground"
-                                        }`}
+                                            }`}
                                     >
                                         {done ? "✓" : i + 1}
                                     </div>
                                     <span
-                                        className={`text-xs ${
-                                            done
+                                        className={`text-xs ${done
                                                 ? "font-medium"
                                                 : isActive
                                                     ? "font-medium text-primary"
                                                     : "text-muted-foreground"
-                                        }`}
+                                            }`}
                                     >
                                         {step.label}
                                     </span>
