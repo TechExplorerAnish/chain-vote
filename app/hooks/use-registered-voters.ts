@@ -32,8 +32,8 @@ export function useRegisteredVoters(electionPda: string | undefined, externalTri
                 const whitelistAccounts = await program.account.whitelistEntry.all([
                     {
                         memcmp: {
-                            offset: 8, // After discriminator
-                            bytes: electionKey.toBase58(),
+                            offset: 8, // After discriminator (8 bytes)
+                            bytes: electionKey.toBuffer().toString("base64"),
                         },
                     },
                 ]);

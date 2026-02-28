@@ -27,6 +27,9 @@ pub mod chain_vote {
         action: state::GovernanceAction,
         action_hash: [u8; 32],
         expires_at: i64,
+        init_election_title: String,
+        init_election_start_time: i64,
+        init_election_end_time: i64,
     ) -> Result<()> {
         instructions::create_governance_proposal::handler(
             ctx,
@@ -34,6 +37,9 @@ pub mod chain_vote {
             action,
             action_hash,
             expires_at,
+            init_election_title,
+            init_election_start_time,
+            init_election_end_time,
         )
     }
 

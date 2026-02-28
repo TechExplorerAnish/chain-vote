@@ -29,14 +29,35 @@ pub fn handler(
     action: GovernanceAction,
     action_hash: [u8; 32],
     expires_at: i64,
+    init_election_title: String,
+    init_election_start_time: i64,
+    init_election_end_time: i64,
 ) -> Result<()> {
     let multisig = &mut ctx.accounts.multisig;
     let proposer_key = ctx.accounts.proposer.key();
     let now = Clock::get()?.unix_timestamp;
 
-    require!(multisig.is_admin(&proposer_key), VotingError::UnauthorizedAccess);
+    require!(
+        multisig.is_admin(&proposer_key),
+        VotingError::UnauthorizedAccess
+    );
     require!(nonce == multisig.proposal_nonce, VotingError::InvalidNonce);
     require!(expires_at > now, VotingError::ProposalExpired);
+
+    if action == GovernanceAction::InitializeElection {
+        require!(
+            !init_election_title.is_empty(),
+            VotingError::InvalidElectionState
+        );
+        require!(
+            init_election_title.len() <= GovernanceProposal::MAX_INIT_ELECTION_TITLE_LEN,
+            VotingError::TitleTooLong
+        );
+        require!(
+            init_election_end_time > init_election_start_time,
+            VotingError::InvalidTimeRange
+        );
+    }
 
     let proposer_index = multisig
         .admin_index(&proposer_key)
@@ -47,6 +68,17 @@ pub fn handler(
     proposal.proposer = proposer_key;
     proposal.action = action;
     proposal.action_hash = action_hash;
+    if action == GovernanceAction::InitializeElection {
+        proposal.init_election_title = init_election_title;
+        proposal.init_election_start_time = init_election_start_time;
+        proposal.init_election_end_time = init_election_end_time;
+        proposal.has_init_election_payload = true;
+    } else {
+        proposal.init_election_title = String::new();
+        proposal.init_election_start_time = 0;
+        proposal.init_election_end_time = 0;
+        proposal.has_init_election_payload = false;
+    }
     proposal.nonce = nonce;
     proposal.approvals = [false; crate::state::MAX_MULTISIG_ADMINS];
     proposal.approvals[proposer_index] = true;

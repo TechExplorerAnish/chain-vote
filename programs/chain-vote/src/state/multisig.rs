@@ -42,6 +42,10 @@ pub struct GovernanceProposal {
     pub proposer: Pubkey,
     pub action: GovernanceAction,
     pub action_hash: [u8; 32],
+    pub init_election_title: String,
+    pub init_election_start_time: i64,
+    pub init_election_end_time: i64,
+    pub has_init_election_payload: bool,
     pub nonce: u64,
     pub approvals: [bool; MAX_MULTISIG_ADMINS],
     pub approval_count: u8,
@@ -53,5 +57,23 @@ pub struct GovernanceProposal {
 }
 
 impl GovernanceProposal {
-    pub const LEN: usize = 8 + 32 + 32 + 1 + 32 + 8 + MAX_MULTISIG_ADMINS + 1 + 1 + 1 + 8 + 8 + 1;
+    pub const MAX_INIT_ELECTION_TITLE_LEN: usize = 100;
+
+    pub const LEN: usize = 8
+        + 32
+        + 32
+        + 1
+        + 32
+        + (4 + Self::MAX_INIT_ELECTION_TITLE_LEN)
+        + 8
+        + 8
+        + 1
+        + 8
+        + MAX_MULTISIG_ADMINS
+        + 1
+        + 1
+        + 1
+        + 8
+        + 8
+        + 1;
 }

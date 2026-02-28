@@ -22,8 +22,24 @@ describe("chain-vote adversarial suite", () => {
     }, "confirmed");
   }
 
+  async function waitUntilChainTime(targetUnix: number) {
+    for (let i = 0; i < 40; i++) {
+      const slot = await provider.connection.getSlot("processed");
+      const blockTime = await provider.connection.getBlockTime(slot);
+      if (blockTime !== null && blockTime >= targetUnix) return;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    throw new Error("Timed out waiting for validator clock");
+  }
+
   // Create governance proposal utilities
-  async function createExecuteProposal(adminKp: Keypair, multisigPda: PublicKey, action: any, actionHash: Buffer) {
+  async function createExecuteProposal(
+    adminKp: Keypair,
+    multisigPda: PublicKey,
+    action: any,
+    actionHash: Buffer,
+    initPayload?: { title: string; startTime: anchor.BN; endTime: anchor.BN }
+  ) {
     const multisigState = await program.account.adminMultisig.fetch(multisigPda);
     const nonce = multisigState.proposalNonce;
     const [proposalPda] = PublicKey.findProgramAddressSync(
@@ -33,9 +49,20 @@ describe("chain-vote adversarial suite", () => {
 
     const now = Math.floor(Date.now() / 1000);
     const expiresAt = new anchor.BN(now + 86400);
+    const initTitle = initPayload?.title ?? "";
+    const initStartTime = initPayload?.startTime ?? new anchor.BN(0);
+    const initEndTime = initPayload?.endTime ?? new anchor.BN(0);
 
     await program.methods
-      .createGovernanceProposal(nonce, action, Array.from(actionHash), expiresAt)
+      .createGovernanceProposal(
+        nonce,
+        action,
+        Array.from(actionHash),
+        expiresAt,
+        initTitle,
+        initStartTime,
+        initEndTime
+      )
       .accounts({
         multisig: multisigPda,
         proposal: proposalPda,
@@ -46,21 +73,13 @@ describe("chain-vote adversarial suite", () => {
       .rpc();
 
     await program.methods
-      .approveGovernanceProposal()
-      .accounts({
-        multisig: multisigPda,
-        proposal: proposalPda,
-        signer: adminKp.publicKey,
-      })
-      .signers([adminKp])
-      .rpc();
-
-    await program.methods
       .executeGovernanceProposal()
       .accounts({
         multisig: multisigPda,
         proposal: proposalPda,
+        executor: adminKp.publicKey,
       })
+      .signers([adminKp])
       .rpc();
 
     return { proposalPda, nonce };
@@ -96,7 +115,7 @@ describe("chain-vote adversarial suite", () => {
     );
 
     const title = "Phase Election";
-    const startTime = new anchor.BN(Math.floor(Date.now() / 1000) - 1000);
+    const startTime = new anchor.BN(Math.floor(Date.now() / 1000) + 20);
     const endTime = new anchor.BN(Math.floor(Date.now() / 1000) + 100000);
 
     const initHash = createHash("sha256")
@@ -108,7 +127,13 @@ describe("chain-vote adversarial suite", () => {
       .update(endTime.toArrayLike(Buffer, "le", 8))
       .digest();
 
-    const { nonce: initNonce } = await createExecuteProposal(adminKp, multisigPda, { initializeElection: {} }, initHash);
+    const { nonce: initNonce r } = await createExecuteProposal(
+      adminKp,
+      multisigPda,
+      { initializeElection: {} },
+      initHash,
+      { title, startTime, endTime }
+    );
 
     await program.methods
       .initializeElection(initNonce, title, startTime, endTime)
@@ -165,10 +190,16 @@ describe("chain-vote adversarial suite", () => {
     const [electionPda] = PublicKey.findProgramAddressSync([Buffer.from("election"), adminKp.publicKey.toBuffer()], program.programId);
 
     const title = "Commit Reveal";
-    const startTime = new anchor.BN(Math.floor(Date.now() / 1000) - 1000);
+    const startTime = new anchor.BN(Math.floor(Date.now() / 1000) + 20);
     const endTime = new anchor.BN(Math.floor(Date.now() / 1000) + 100000);
     const initHash = createHash("sha256").update("governance-action-v1").update("initialize-election").update(adminKp.publicKey.toBuffer()).update(title).update(startTime.toArrayLike(Buffer, "le", 8)).update(endTime.toArrayLike(Buffer, "le", 8)).digest();
-    const { nonce: initNonce } = await createExecuteProposal(adminKp, multisigPda, { initializeElection: {} }, initHash);
+    const { nonce: initNonce } = await createExecuteProposal(
+      adminKp,
+      multisigPda,
+      { initializeElection: {} },
+      initHash,
+      { title, startTime, endTime }
+    );
     await program.methods.initializeElection(initNonce, title, startTime, endTime).accounts({ election: electionPda, multisig: multisigPda, multisigAuthority: adminKp.publicKey, admin: adminKp.publicKey, systemProgram: SystemProgram.programId }).signers([adminKp]).rpc();
 
     // Transition to Registration
@@ -187,6 +218,8 @@ describe("chain-vote adversarial suite", () => {
     const validHash = createHash("sha256").update("governance-action-v1").update("transition-phase").update(electionPda.toBuffer()).update(Buffer.from([2])).digest();
     const { proposalPda, nonce } = await createExecuteProposal(adminKp, multisigPda, { transitionPhase: {} }, validHash);
     await program.methods.transitionElectionPhase({ votingPhase: {} }, nonce).accounts({ election: electionPda, multisig: multisigPda, proposal: proposalPda, multisigAuthority: adminKp.publicKey, admin: adminKp.publicKey }).signers([adminKp]).rpc();
+
+    await waitUntilChainTime(startTime.toNumber());
 
     const voteNonce = new anchor.BN(1);
     const salt = Buffer.alloc(32, 1);

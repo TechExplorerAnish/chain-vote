@@ -149,7 +149,10 @@ export function useCreateProposal() {
             nonce: bigint,
             action: GovernanceAction,
             actionHash: Uint8Array,
-            expiresAt: bigint
+            expiresAt: bigint,
+            initElectionTitle: string,
+            initElectionStartTime: bigint,
+            initElectionEndTime: bigint
         ): Promise<string> => {
             setLoading(true);
             setError(null);
@@ -172,7 +175,10 @@ export function useCreateProposal() {
                         new BN(nonce.toString()),
                         actionArg,
                         Array.from(actionHash),
-                        new BN(expiresAt.toString())
+                        new BN(expiresAt.toString()),
+                        initElectionTitle,
+                        new BN(initElectionStartTime.toString()),
+                        new BN(initElectionEndTime.toString())
                     )
                     .accounts({
                         multisig: multisigPda,
@@ -674,6 +680,10 @@ export interface ProposalAccountData {
     proposer: PublicKey;
     action: GovernanceAction;
     actionHash: number[];
+    initElectionTitle: string;
+    initElectionStartTime: bigint;
+    initElectionEndTime: bigint;
+    hasInitElectionPayload: boolean;
     nonce: bigint;
     approvals: boolean[];
     approvalCount: number;
@@ -723,6 +733,10 @@ export function useProposalAccount(
                 proposer: account.proposer as PublicKey,
                 action: parseActionFromAnchor(account.action),
                 actionHash: account.actionHash as number[],
+                initElectionTitle: String(account.initElectionTitle ?? ""),
+                initElectionStartTime: BigInt((account.initElectionStartTime as { toString(): string }).toString()),
+                initElectionEndTime: BigInt((account.initElectionEndTime as { toString(): string }).toString()),
+                hasInitElectionPayload: Boolean(account.hasInitElectionPayload),
                 nonce: BigInt((account.nonce as { toString(): string }).toString()),
                 approvals: (account.approvals as boolean[]).slice(0, adminCount),
                 approvalCount: account.approvalCount as number,

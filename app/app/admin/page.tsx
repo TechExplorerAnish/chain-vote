@@ -44,7 +44,32 @@ import {
 import type { ProposalAccountData } from "@/hooks/use-admin";
 import { GovernanceAction, ElectionPhase, PHASE_LABELS } from "@/lib/types";
 import { getMultisigPda, getElectionPda, getProposalPda } from "@/lib/pda";
+import { getConnection } from "@/lib/program";
 import { parseError } from "@/lib/utils";
+
+function toLocalDateTimeInput(unixSeconds: bigint): string {
+    const d = new Date(Number(unixSeconds) * 1000);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+async function getChainNowSec(): Promise<bigint> {
+    try {
+        const connection = getConnection();
+        const slot = await connection.getSlot("processed");
+        const blockTime = await connection.getBlockTime(slot);
+        if (typeof blockTime === "number") {
+            return BigInt(blockTime);
+        }
+    } catch {
+        // Fall back to local clock if RPC time lookup fails.
+    }
+    return BigInt(Math.floor(Date.now() / 1000));
+}
 
 export default function AdminPage() {
     const { connected, publicKey } = useWallet();
@@ -231,9 +256,11 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
     const [title, setTitle] = useState("");
     const [startTime, setStartTime] = useState("");
     const [endTime, setEndTime] = useState("");
+    const [autofillHint, setAutofillHint] = useState<string | null>(null);
 
     // Auto-fill nonce from multisig
     const { multisig, fetchMultisig } = useMultisigAccount(msAuthority || undefined);
+    const { proposal, fetchProposal } = useProposalAccount(msAuthority || undefined, proposalNonce);
 
     useEffect(() => {
         if (msAuthority) {
@@ -252,6 +279,32 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
         }
     }, [multisig, proposalNonceTouched]);
 
+    useEffect(() => {
+        if (!msAuthority || !proposalNonce) {
+            setAutofillHint(null);
+            return;
+        }
+
+        try {
+            new PublicKey(msAuthority);
+            fetchProposal();
+        } catch {
+            setAutofillHint(null);
+        }
+    }, [msAuthority, proposalNonce, fetchProposal]);
+
+    useEffect(() => {
+        if (!proposal || proposal.action !== GovernanceAction.InitializeElection || !proposal.hasInitElectionPayload) {
+            setAutofillHint(null);
+            return;
+        }
+
+        setTitle(proposal.initElectionTitle);
+        setStartTime(toLocalDateTimeInput(proposal.initElectionStartTime));
+        setEndTime(toLocalDateTimeInput(proposal.initElectionEndTime));
+        setAutofillHint("Auto-filled from on-chain InitializeElection proposal payload.");
+    }, [proposal]);
+
     const handleInit = useCallback(async () => {
         if (!publicKey) return;
         if (!proposalNonce) {
@@ -261,12 +314,24 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
             return;
         }
         try {
+            const startUnix = BigInt(Math.floor(new Date(startTime).getTime() / 1000));
+            const endUnix = BigInt(Math.floor(new Date(endTime).getTime() / 1000));
+            const chainNow = await getChainNowSec();
+
+            if (startUnix < chainNow) {
+                toast.error("Start time is already in the past on-chain", {
+                    description:
+                        "This proposal can no longer initialize. Create a new InitializeElection proposal with a future start time.",
+                });
+                return;
+            }
+
             const tx = await initializeElection(
                 new PublicKey(msAuthority),
                 BigInt(proposalNonce),
                 title,
-                BigInt(Math.floor(new Date(startTime).getTime() / 1000)),
-                BigInt(Math.floor(new Date(endTime).getTime() / 1000))
+                startUnix,
+                endUnix
             );
             toast.success("Election initialized!", { description: `Tx: ${tx.slice(0, 16)}…` });
             refetch();
@@ -360,6 +425,9 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
                                 placeholder="Election title"
                             />
                         </div>
+                        {autofillHint && (
+                            <p className="text-xs text-muted-foreground">{autofillHint}</p>
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Start Time</Label>
@@ -613,8 +681,11 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                 return;
             }
 
-            // Compute action hash based on type
+            // Compute action hash + optional payload based on type
             let actionHash: Uint8Array;
+            let initElectionTitleArg = "";
+            let initElectionStartTimeArg = 0n;
+            let initElectionEndTimeArg = 0n;
             if (action === GovernanceAction.InitializeElection) {
                 // Validate election details are provided
                 if (!electionTitle || !electionStartTime || !electionEndTime) {
@@ -626,6 +697,19 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
 
                 const startTimeUnix = BigInt(Math.floor(new Date(electionStartTime).getTime() / 1000));
                 const endTimeUnix = BigInt(Math.floor(new Date(electionEndTime).getTime() / 1000));
+                const chainNow = await getChainNowSec();
+
+                if (startTimeUnix <= chainNow + 30n) {
+                    toast.error("Start time too close to current chain time", {
+                        description:
+                            "Set election start at least 30 seconds in the future to avoid StartTimeInPast at initialization.",
+                    });
+                    return;
+                }
+
+                initElectionTitleArg = electionTitle;
+                initElectionStartTimeArg = startTimeUnix;
+                initElectionEndTimeArg = endTimeUnix;
 
                 actionHash = await hashInitializeElectionAction(
                     publicKey,
@@ -657,8 +741,18 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             );
 
             // We need current nonce from multisig — use 0 as default
-            const tx = await createProposal(multisigPda, nonceBigInt, action, actionHash, expiresAt);
+            const tx = await createProposal(
+                multisigPda,
+                nonceBigInt,
+                action,
+                actionHash,
+                expiresAt,
+                initElectionTitleArg,
+                initElectionStartTimeArg,
+                initElectionEndTimeArg
+            );
             toast.success("Proposal created!", { description: `Tx: ${tx.slice(0, 16)}…` });
+
             setProposalNonceInput(nonceBigInt.toString());
             fetchProposal();
             fetchMultisig(); // re-fetch to auto-update nonce
