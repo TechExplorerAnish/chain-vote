@@ -226,7 +226,8 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
     const { publicKey } = useWallet();
 
     const [msAuthority, setMsAuthority] = useState("");
-    const [proposalNonce, setProposalNonce] = useState("0");
+    const [proposalNonce, setProposalNonce] = useState("");
+    const [proposalNonceTouched, setProposalNonceTouched] = useState(false);
     const [title, setTitle] = useState("");
     const [startTime, setStartTime] = useState("");
     const [endTime, setEndTime] = useState("");
@@ -244,13 +245,21 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
     }, [msAuthority, fetchMultisig]);
 
     useEffect(() => {
-        if (multisig) {
-            setProposalNonce(multisig.proposalNonce.toString());
+        if (multisig && !proposalNonceTouched) {
+            const nextNonce = multisig.proposalNonce;
+            const suggestedNonce = nextNonce > 0n ? nextNonce - 1n : 0n;
+            setProposalNonce(suggestedNonce.toString());
         }
-    }, [multisig]);
+    }, [multisig, proposalNonceTouched]);
 
     const handleInit = useCallback(async () => {
         if (!publicKey) return;
+        if (!proposalNonce) {
+            toast.error("Proposal nonce required", {
+                description: "Enter the executed InitializeElection proposal nonce.",
+            });
+            return;
+        }
         try {
             const tx = await initializeElection(
                 new PublicKey(msAuthority),
@@ -330,14 +339,17 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
                                 <Label>Proposal Nonce</Label>
                                 {multisig && (
                                     <span className="text-xs text-muted-foreground">
-                                        Next on-chain: {multisig.proposalNonce.toString()}
+                                        Next on-chain: {multisig.proposalNonce.toString()} · Usually use {multisig.proposalNonce > 0n ? (multisig.proposalNonce - 1n).toString() : "0"} to initialize
                                     </span>
                                 )}
                             </div>
                             <Input
                                 type="number"
                                 value={proposalNonce}
-                                onChange={(e) => setProposalNonce(e.target.value)}
+                                onChange={(e) => {
+                                    setProposalNonceTouched(true);
+                                    setProposalNonce(e.target.value);
+                                }}
                             />
                         </div>
                         <div className="space-y-2">
@@ -544,14 +556,14 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
     const [proposalPhase, setProposalPhase] = useState<string>("");
 
     // Approve/Execute — auto-synced from chain
-    const [proposalNonceInput, setProposalNonceInput] = useState("0");
+    const [proposalNonceInput, setProposalNonceInput] = useState("");
 
     // Auto-fill nonce from multisig account
     useEffect(() => {
-        if (multisig) {
+        if (multisig && proposalNonceInput === "") {
             setProposalNonceInput(multisig.proposalNonce.toString());
         }
-    }, [multisig]);
+    }, [multisig, proposalNonceInput]);
 
     // Transition execution
     const [nextPhase, setNextPhase] = useState<string>("");
@@ -581,6 +593,12 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
 
     const handleCreateProposal = useCallback(async () => {
         if (!publicKey || !msAuthority || !actionType) return;
+        if (proposalNonceInput === "") {
+            toast.error("Proposal nonce required", {
+                description: "Enter the nonce for this governance proposal.",
+            });
+            return;
+        }
 
         try {
             const msAuth = new PublicKey(msAuthority);
@@ -641,6 +659,7 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             // We need current nonce from multisig — use 0 as default
             const tx = await createProposal(multisigPda, nonceBigInt, action, actionHash, expiresAt);
             toast.success("Proposal created!", { description: `Tx: ${tx.slice(0, 16)}…` });
+            setProposalNonceInput(nonceBigInt.toString());
             fetchProposal();
             fetchMultisig(); // re-fetch to auto-update nonce
         } catch (err) {
