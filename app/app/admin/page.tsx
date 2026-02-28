@@ -231,6 +231,24 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
     const [startTime, setStartTime] = useState("");
     const [endTime, setEndTime] = useState("");
 
+    // Auto-fill nonce from multisig
+    const { multisig, fetchMultisig } = useMultisigAccount(msAuthority || undefined);
+
+    useEffect(() => {
+        if (msAuthority) {
+            try {
+                new PublicKey(msAuthority);
+                fetchMultisig();
+            } catch { /* invalid key */ }
+        }
+    }, [msAuthority, fetchMultisig]);
+
+    useEffect(() => {
+        if (multisig) {
+            setProposalNonce(multisig.proposalNonce.toString());
+        }
+    }, [multisig]);
+
     const handleInit = useCallback(async () => {
         if (!publicKey) return;
         try {
@@ -308,7 +326,14 @@ function ElectionSection({ adminKey }: { adminKey: string }) {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Proposal Nonce</Label>
+                            <div className="flex items-center justify-between">
+                                <Label>Proposal Nonce</Label>
+                                {multisig && (
+                                    <span className="text-xs text-muted-foreground">
+                                        Next on-chain: {multisig.proposalNonce.toString()}
+                                    </span>
+                                )}
+                            </div>
                             <Input
                                 type="number"
                                 value={proposalNonce}
@@ -497,6 +522,19 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
     const [actionType, setActionType] = useState<string>("");
     const [expiryHours, setExpiryHours] = useState("24");
 
+    // Fetch multisig to auto-fill nonce
+    const { multisig, fetchMultisig } = useMultisigAccount(msAuthority || undefined);
+
+    // Auto-fetch multisig when authority changes
+    useEffect(() => {
+        if (msAuthority) {
+            try {
+                new PublicKey(msAuthority);
+                fetchMultisig();
+            } catch { /* invalid key */ }
+        }
+    }, [msAuthority, fetchMultisig]);
+
     // Election details for InitializeElection proposal
     const [electionTitle, setElectionTitle] = useState("");
     const [electionStartTime, setElectionStartTime] = useState("");
@@ -505,8 +543,15 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
     // Phase for TransitionPhase proposal creation (hash input)
     const [proposalPhase, setProposalPhase] = useState<string>("");
 
-    // Approve/Execute
+    // Approve/Execute — auto-synced from chain
     const [proposalNonceInput, setProposalNonceInput] = useState("0");
+
+    // Auto-fill nonce from multisig account
+    useEffect(() => {
+        if (multisig) {
+            setProposalNonceInput(multisig.proposalNonce.toString());
+        }
+    }, [multisig]);
 
     // Transition execution
     const [nextPhase, setNextPhase] = useState<string>("");
@@ -597,11 +642,12 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const tx = await createProposal(multisigPda, nonceBigInt, action, actionHash, expiresAt);
             toast.success("Proposal created!", { description: `Tx: ${tx.slice(0, 16)}…` });
             fetchProposal();
+            fetchMultisig(); // re-fetch to auto-update nonce
         } catch (err) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, msAuthority, actionType, proposalPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime, fetchProposal]);
+    }, [publicKey, msAuthority, actionType, proposalPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime, fetchProposal, fetchMultisig]);
 
     const handleApprove = useCallback(async () => {
         if (!publicKey || !msAuthority) return;
@@ -703,7 +749,14 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             </div>
 
             <div className="space-y-2">
-                <Label>Proposal Nonce</Label>
+                <div className="flex items-center justify-between">
+                    <Label>Proposal Nonce</Label>
+                    {multisig && (
+                        <span className="text-xs text-muted-foreground">
+                            Next on-chain: {multisig.proposalNonce.toString()}
+                        </span>
+                    )}
+                </div>
                 <Input
                     type="number"
                     value={proposalNonceInput}
