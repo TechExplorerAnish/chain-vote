@@ -33,41 +33,34 @@ export function useRegisteredVoters(electionPda: string | undefined, externalTri
                     {
                         memcmp: {
                             offset: 8, // After discriminator (8 bytes)
-                            bytes: electionKey.toBuffer().toString("base64"),
+                            // memcmp bytes must be base58 for Pubkey filters
+                            bytes: electionKey.toBase58(),
                         },
                     },
                 ]);
+
+                // Fetch all voter records for this election once
+                const voterRecordAccounts = await program.account.voterRecord.all([
+                    {
+                        memcmp: {
+                            offset: 8, // After discriminator (8 bytes)
+                            bytes: electionKey.toBase58(),
+                        },
+                    },
+                ]);
+
+                const voterRecordByVoter = new Map<string, VoterRecordAccount>();
+                for (const vr of voterRecordAccounts) {
+                    const record = vr.account as VoterRecordAccount;
+                    voterRecordByVoter.set(record.voter.toBase58(), record);
+                }
 
                 // For each whitelist entry, try to fetch their voter record
                 const votersData = await Promise.all(
                     whitelistAccounts.map(async (wl: any) => {
                         const whitelistData = wl.account as WhitelistEntryAccount;
                         const voterAddress = whitelistData.voter.toBase58();
-
-                        // Try to fetch voter record
-                        let voterRecord: VoterRecordAccount | null = null;
-                        try {
-                            const voterRecordAccounts = await program.account.voterRecord.all([
-                                {
-                                    memcmp: {
-                                        offset: 8,
-                                        bytes: electionKey.toBase58(),
-                                    },
-                                },
-                                {
-                                    memcmp: {
-                                        offset: 8 + 32, // After discriminator + election pubkey
-                                        bytes: whitelistData.voter.toBase58(),
-                                    },
-                                },
-                            ]);
-
-                            if (voterRecordAccounts.length > 0) {
-                                voterRecord = voterRecordAccounts[0].account as VoterRecordAccount;
-                            }
-                        } catch (err) {
-                            // Voter hasn't voted yet, that's okay
-                        }
+                        const voterRecord = voterRecordByVoter.get(voterAddress) ?? null;
 
                         return {
                             voterAddress,

@@ -36,13 +36,9 @@ export default function Home() {
           <Link href="/admin">
             <Button>Admin Panel</Button>
           </Link>
-          <a
-            href="https://github.com"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <Link href="/documentation">
             <Button variant="outline">Documentation</Button>
-          </a>
+          </Link>
         </div>
       </section>
 
