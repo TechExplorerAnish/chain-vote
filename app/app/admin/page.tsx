@@ -57,6 +57,13 @@ function toLocalDateTimeInput(unixSeconds: bigint): string {
     return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
 }
 
+function hexToBytes(hex: string): Uint8Array {
+    const normalized = hex.trim().toLowerCase();
+    return new Uint8Array(
+        normalized.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
+    );
+}
+
 async function getChainNowSec(): Promise<bigint> {
     try {
         const connection = getConnection();
@@ -636,6 +643,10 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
     // Transition execution
     const [nextPhase, setNextPhase] = useState<string>("");
 
+    // Publish Tally Root
+    const [tallyRootHex, setTallyRootHex] = useState("");
+    const [proofUri, setProofUri] = useState("");
+
     // For transition, use the same nonce as the proposal
     const transNonce = proposalNonceInput;
 
@@ -728,11 +739,24 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                 const phase = parseInt(proposalPhase, 10) as ElectionPhase;
                 actionHash = await hashTransitionPhaseAction(elPda, phase);
             } else {
+                if (!tallyRootHex || tallyRootHex.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(tallyRootHex)) {
+                    toast.error("Invalid tally root", {
+                        description: "For PublishTallyRoot, enter a valid 64-char hex tally root.",
+                    });
+                    return;
+                }
+                if (!proofUri) {
+                    toast.error("Missing proof URI", {
+                        description: "For PublishTallyRoot, enter proof URI used to compute the action hash.",
+                    });
+                    return;
+                }
                 const [elPda] = getElectionPda(new PublicKey(adminKey));
+                const tallyRootBytes = hexToBytes(tallyRootHex);
                 actionHash = await hashPublishTallyRootAction(
                     elPda,
-                    new Uint8Array(32),
-                    ""
+                    tallyRootBytes,
+                    proofUri
                 );
             }
 
@@ -760,7 +784,7 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, msAuthority, actionType, proposalPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime, fetchProposal, fetchMultisig]);
+    }, [publicKey, msAuthority, actionType, proposalPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime, tallyRootHex, proofUri, fetchProposal, fetchMultisig]);
 
     const handleApprove = useCallback(async () => {
         if (!publicKey || !msAuthority) return;
@@ -847,6 +871,71 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             toast.error(title, { description });
         }
     }, [publicKey, nextPhase, msAuthority, adminKey, transNonce, proposal, transitionPhase, refetchElection]);
+
+    const handlePublishTally = useCallback(async () => {
+        if (!publicKey) {
+            toast.error("Wallet not connected", { description: "Connect your wallet to continue." });
+            return;
+        }
+        if (!msAuthority) {
+            toast.error("Missing multisig authority", { description: "Enter the multisig authority key." });
+            return;
+        }
+        if (!tallyRootHex || tallyRootHex.length !== 64) {
+            toast.error("Invalid tally root", { description: "Must be 64 hex characters (32 bytes)." });
+            return;
+        }
+        if (!/^[0-9a-fA-F]{64}$/.test(tallyRootHex)) {
+            toast.error("Invalid tally root", { description: "Tally root must be hexadecimal (0-9, a-f)." });
+            return;
+        }
+        if (!proofUri) {
+            toast.error("Missing proof URI", { description: "Enter the proof URI (IPFS/URL)." });
+            return;
+        }
+        if (!proposalNonceInput) {
+            toast.error("Missing proposal nonce", { description: "Enter the executed PublishTallyRoot proposal nonce." });
+            return;
+        }
+
+        try {
+            const tallyRootBytes = hexToBytes(tallyRootHex);
+            const [multisigPda] = getMultisigPda(new PublicKey(msAuthority));
+            const [elPda] = getElectionPda(new PublicKey(adminKey));
+
+            // Client-side hash pre-check to catch nonce/payload mismatch before tx.
+            if (proposal) {
+                const expectedHash = await hashPublishTallyRootAction(elPda, tallyRootBytes, proofUri);
+                const storedHash = new Uint8Array(proposal.actionHash);
+                const hashesMatch =
+                    expectedHash.length === storedHash.length &&
+                    expectedHash.every((b, i) => b === storedHash[i]);
+
+                if (!hashesMatch) {
+                    toast.error("Action hash mismatch", {
+                        description:
+                            `Proposal #${proposalNonceInput} was created with different tally root/proof URI. ` +
+                            "Use the exact same values used when creating PublishTallyRoot proposal.",
+                        duration: 8000,
+                    });
+                    return;
+                }
+            }
+
+            const tx = await publishTallyRoot(
+                new PublicKey(adminKey),
+                multisigPda,
+                BigInt(proposalNonceInput),
+                tallyRootBytes,
+                proofUri
+            );
+            toast.success("Tally root published!", { description: `Tx: ${tx.slice(0, 16)}…` });
+            refetchElection();
+        } catch (err) {
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
+        }
+    }, [publicKey, msAuthority, adminKey, proposalNonceInput, tallyRootHex, proofUri, proposal, publishTallyRoot, refetchElection]);
 
     return (
         <div className="space-y-4">
@@ -1005,6 +1094,50 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                 </CardContent>
             </Card>
 
+            {/* Publish Tally Root — only shown when relevant */}
+            {(actionType === "2" || (proposal && proposal.action === GovernanceAction.PublishTallyRoot)) && (
+                <>
+                    <Separator />
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Publish Tally Root</CardTitle>
+                            <CardDescription>
+                                Commit final tally root before transitioning to Finalized phase.
+                                Requires an executed PublishTallyRoot proposal.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Tally Root (hex, 64 chars)</Label>
+                                <Input
+                                    value={tallyRootHex}
+                                    onChange={(e) => setTallyRootHex(e.target.value)}
+                                    placeholder="0000000000000000000000000000000000000000000000000000000000000000"
+                                    className="font-mono text-xs"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Proof URI</Label>
+                                <Input
+                                    value={proofUri}
+                                    onChange={(e) => setProofUri(e.target.value)}
+                                    placeholder="ipfs://... or https://..."
+                                />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Note: Uses the "Proposal Nonce" value from above ({proposalNonceInput})
+                            </p>
+                            <Button
+                                onClick={handlePublishTally}
+                                disabled={publishLoading}
+                            >
+                                {publishLoading ? "Publishing…" : "Publish Tally Root"}
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </>
+            )}
+
             {/* Phase Transition — only shown when relevant */}
             {(actionType === "1" || (proposal && proposal.action === GovernanceAction.TransitionPhase)) && (
                 <>
@@ -1017,6 +1150,11 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                             </CardTitle>
                             <CardDescription>
                                 Advance the election lifecycle. Requires an executed TransitionPhase proposal.
+                                {election?.phase === ElectionPhase.RevealPhase && (
+                                    <span className="block mt-2 text-destructive">
+                                        ⚠️ Before transitioning to Finalized, you must publish the tally root (see above).
+                                    </span>
+                                )}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
