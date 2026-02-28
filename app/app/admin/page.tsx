@@ -892,46 +892,49 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                 </CardContent>
             </Card>
 
-            <Separator />
-
-            {/* Phase Transition */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                        <span>Phase Transition</span>
-                        {election && <PhaseBadge phase={election.phase} />}
-                    </CardTitle>
-                    <CardDescription>
-                        Advance the election lifecycle. Requires an executed TransitionPhase proposal.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label>Target Phase</Label>
-                        <Select value={nextPhase} onValueChange={setNextPhase}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select next phase" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {[1, 2, 3, 4].map((p) => (
-                                    <SelectItem key={p} value={p.toString()}>
-                                        {PHASE_LABELS[p as ElectionPhase]}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        Note: Uses the "Proposal Nonce" value from above ({proposalNonceInput})
-                    </p>
-                    <Button
-                        onClick={handleTransition}
-                        disabled={transitionLoading}
-                    >
-                        {transitionLoading ? "Transitioning…" : "Transition Phase"}
-                    </Button>
-                </CardContent>
-            </Card>
+            {/* Phase Transition — only shown when relevant */}
+            {(actionType === "1" || (proposal && proposal.action === GovernanceAction.TransitionPhase)) && (
+                <>
+                    <Separator />
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center justify-between">
+                                <span>Phase Transition</span>
+                                {election && <PhaseBadge phase={election.phase} />}
+                            </CardTitle>
+                            <CardDescription>
+                                Advance the election lifecycle. Requires an executed TransitionPhase proposal.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Target Phase</Label>
+                                <Select value={nextPhase} onValueChange={setNextPhase}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select next phase" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {[1, 2, 3, 4].map((p) => (
+                                            <SelectItem key={p} value={p.toString()}>
+                                                {PHASE_LABELS[p as ElectionPhase]}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Note: Uses the "Proposal Nonce" value from above ({proposalNonceInput})
+                            </p>
+                            <Button
+                                onClick={handleTransition}
+                                disabled={transitionLoading}
+                            >
+                                {transitionLoading ? "Transitioning…" : "Transition Phase"}
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </>
+            )}
         </div>
     );
 }
