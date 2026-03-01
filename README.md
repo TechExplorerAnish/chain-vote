@@ -1,203 +1,233 @@
-# Chain Vote Protocol
+<h1 align="center">Chain Vote</h1>
 
-Chain Vote is a Solana governance voting protocol built with Anchor. It uses a commit–reveal model, deterministic PDA account design, strict phase transitions, and multisig-governed administrative actions.
+<p align="center">
+  <img src="https://img.shields.io/badge/Solana-Devnet-green" alt="Solana Devnet">
+  <img src="https://img.shields.io/badge/Anchor-0.32.x-blue" alt="Anchor">
+  <img src="https://img.shields.io/badge/Next.js-16-black" alt="Next.js">
+  <img src="https://img.shields.io/badge/Model-Commit--Reveal-purple" alt="Commit Reveal">
+  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
+</p>
 
-## Architecture Overview
+<p align="center">
+  <strong>Governance-grade election protocol on Solana</strong><br>
+  <i>Multisig-controlled lifecycle + private vote commits + auditable finalization</i>
+</p>
 
-The system is split into three layers:
+---
 
-1. **On-chain program (Anchor, Rust)**
-   - Election lifecycle management
-   - Commit–reveal voting
-   - Whitelist enforcement
-   - Multisig-governed critical actions
-2. **Frontend (Next.js + TypeScript + `@coral-xyz/anchor`)**
-   - Wallet authentication (Phantom)
-   - Election participation
-   - Result and audit views
-3. **Optional indexer + analytics API**
-   - Event ingestion from Solana logs
-   - Materialized election timelines and governance actions
-   - Dashboard and audit endpoint support
+## Why Chain Vote Exists
 
-## Core Features
+Digital voting systems often fail at one of these:
+- voter privacy,
+- governance transparency,
+- tamper resistance.
 
-- Commit–reveal voting workflow
-- Deterministic PDAs for:
-  - election
-  - candidate
-  - voter record
-  - whitelist entry
-  - multisig and governance proposals
-- Strict election phase machine (conceptual):
-  - Initialized → Registration → Commit → Reveal → Finalized
-- On-chain replay and double-vote protection:
-  - `has_committed`
-  - `has_revealed`
-- Whitelist-based voter eligibility
-- Multisig governance for:
-  - election initialization
-  - phase transitions
-  - result/tally publication
-- Transparent event emission:
-  - `ElectionInitialized`
-  - `CandidateRegistered`
-  - `VoteCommitted`
-  - `VoteRevealed`
-  - `ElectionPhaseTransitioned`
-  - `ResultsPublished`
+Chain Vote is a practical MVP for civic and community elections where:
+1. election administration is controlled via governance proposals,
+2. voters commit privately, then reveal later,
+3. final outcomes are anchored on-chain with proof metadata.
 
-## Security Model
+This aligns with open governance and janamat-style civic technology experiments.
 
-### Commit–reveal privacy
-Votes are first committed as a hash. Candidate choice is only disclosed during reveal. This reduces early vote visibility and front-running pressure.
+---
 
-### Replay protection
-- Voter-level replay protection via `VoterRecord` flags (`has_committed`, `has_revealed`) and nonce-bound commitments.
-- Governance replay protection via monotonic proposal nonce and one-time proposal consumption.
+## Problem → Solution
 
-### Phase enforcement
-The program enforces deterministic forward-only transitions. Invalid transitions are rejected on-chain.
+| Problem | Chain Vote Solution |
+|---|---|
+| Admin powers are opaque | Multisig proposal flow: create → approve → execute → consume |
+| Votes can leak early | Commit-reveal design hides choices during voting phase |
+| Phase abuse / replay risk | Strict forward-only phases + nonce-based replay protection |
+| Weak auditability | On-chain events + published tally root + proof URI |
 
-### PDA constraints
-All core accounts are PDA-derived with seed constraints and relationship checks (for example, candidate must belong to election).
+---
 
-### Multisig governance
-Critical actions are gated behind multisig proposal lifecycle: create → approve → execute → consume.
+## What We Built
 
-## Account Structure Overview
+### Smart Contract (Anchor, Rust)
+- Election state machine: `Created → Registration → Voting → Reveal → Finalized`
+- PDA-based account model:
+  - `Election`, `Candidate`, `VoterRecord`, `WhitelistEntry`
+  - `AdminMultisig`, `GovernanceProposal`
+- Governance action-hash verification for payload integrity
+- Finalization guards:
+  - final tally root must be set
+  - all committed votes must be revealed
 
-- **Election**
-  - Metadata, phase, vote counters, final commitment fields, governance bindings
-- **Candidate**
-  - Candidate metadata and tally counters
-- **VoterRecord**
-  - Commitment, nonce, commit/reveal flags, reveal outcome
-- **WhitelistEntry**
-  - Eligibility binding for voter + election
-- **AdminMultisig**
-  - Admin set, threshold, proposal nonce
-- **GovernanceProposal**
-  - Action intent hash, approvals, execution/consumption status
+### Frontend (Next.js + TypeScript)
+- Admin console for governance operations and election management
+- Voter-facing election dashboard with tabs:
+  - Vote, Reveal, Results, Candidates, Timeline
+- Wallet integration, phase-aware UI, and user safety guards
 
-## Election Lifecycle
+### Security Highlights
+- Commit/reveal duplicate prevention
+- Governance nonce + consumed proposal replay protection
+- Hash pre-checks on sensitive actions
+- Chain-time checks for start/end correctness
 
-### 1) Initialization
-Multisig-approved election creation initializes election metadata and governance linkage.
+---
 
-### 2) Registration
-Candidates and eligible voters are registered via constrained PDAs.
+## Architecture
 
-### 3) Commit phase
-Voters submit vote commitments (`hash(candidate, nonce, salt, election, voter)`), not plaintext choices.
+```mermaid
+graph TB
+    A[Admin UI] --> B[Governance Proposal Lifecycle]
+    B --> C[Anchor Program]
+    D[Voter UI] --> C
+    C --> E[Solana Accounts via PDAs]
+    C --> F[Events + Audit Trail]
+    C --> G[Tally Root + Proof URI]
+```
 
-### 4) Reveal phase
-Voters reveal `(candidate, salt)` and the program verifies it against stored commitment before counting.
+---
 
-### 5) Finalization
-Finalization requires committed tally root and reveal completeness checks.
+## Product UX Summary
 
-## Local Development Setup
+- **Admin flow** is explicit and safe: proposal nonce, status card, and action-specific forms.
+- **Voter flow** is simple: select candidate → commit → reveal.
+- **Clarity under errors**: human-readable errors for common cases (`StartTimeInPast`, `InvalidActionHash`, etc.).
 
-## Prerequisites
+---
 
+## Repository Structure
+
+- [programs/chain-vote](programs/chain-vote) — Anchor program
+- [app](app) — Next.js frontend
+- [tests](tests) — adversarial and lifecycle tests
+- [scripts/reset-chain.sh](scripts/reset-chain.sh) — localnet reset helper
+
+---
+
+## Quick Start (Localnet)
+
+### Prerequisites
 - Rust (stable)
 - Solana CLI
 - Anchor CLI
-- Node.js (LTS) + npm or yarn
+- Node.js LTS
 
-### 1. Install Rust
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-rustup default stable
-```
-
-### 2. Install Solana CLI
+### Install
 
 ```bash
-sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
-solana --version
+npm install
+cd app && npm install
 ```
 
-### 3. Install Anchor
-
-```bash
-cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
-avm install latest
-avm use latest
-anchor --version
-```
-
-### 4. Start local validator
-
-```bash
-solana-test-validator
-```
-
-### 5. Build and deploy program
+### Build
 
 ```bash
 anchor build
-anchor deploy
 ```
 
-## Frontend Setup (Next.js)
+### Reset local chain + deploy
 
 ```bash
-cd frontend
-npm install
+./scripts/reset-chain.sh
+```
+
+### Run frontend
+
+```bash
+cd app
 npm run dev
 ```
 
-Configure environment variables (example):
+---
+
+## Devnet Deployment (for bounty demo)
+
+### 1) Switch cluster
 
 ```bash
-NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899
-NEXT_PUBLIC_PROGRAM_ID=<DEPLOYED_PROGRAM_ID>
+solana config set --url https://api.devnet.solana.com
+solana config get
 ```
 
-## Testing
-
-Run Rust/Anchor tests:
+### 2) Fund deployer
 
 ```bash
-anchor test
+solana airdrop 2
+solana balance
 ```
 
-Run TypeScript test suite:
+### 3) Deploy program
 
 ```bash
-npm test
+anchor build
+anchor deploy --provider.cluster devnet
 ```
 
-## Deployment Notes
+### 4) Configure frontend
 
-## Devnet
-
-- Set cluster:
+Create/update [app/.env.local](app/.env.local):
 
 ```bash
-solana config set --url devnet
+NEXT_PUBLIC_RPC_URL=https://api.devnet.solana.com
+NEXT_PUBLIC_WS_URL=wss://api.devnet.solana.com
+NEXT_PUBLIC_PROGRAM_ID=<YOUR_DEVNET_PROGRAM_ID>
 ```
 
-- Fund deployer wallet and deploy program.
-- Update program ID in frontend env and IDL bindings.
+### 5) Start app
 
-## Mainnet
+```bash
+cd app
+npm run dev
+```
 
-- Use hardware-backed key management for multisig admins.
-- Lock deployment pipeline with reviewed artifacts and reproducible builds.
-- Perform full audit, fuzzing, and invariant test pass before release.
+---
+
+## Test Status
+
+Run:
+
+```bash
+anchor test --skip-local-validator
+```
+
+Includes deterministic phase-machine and adversarial flow checks.
+
+---
+
+## Bounty Evaluation Mapping
+
+| Evaluation Criteria | How Chain Vote Addresses It |
+|---|---|
+| Problem Statement | Trust-minimized, privacy-preserving elections |
+| Potential Impact | Applicable to civic groups, DAOs, student/community governance |
+| Business Case | Reusable election/governance primitive with extension opportunities |
+| UX | Guided admin and voter flows with phase-aware feedback |
+| Technical Implementation | Anchor PDAs, multisig governance, commit-reveal, adversarial tests |
+| Demo Video | 3-minute flow can show end-to-end lifecycle |
+
+---
+
+## Submission Links (fill before final submit)
+
+- **Live link:** `https://<your-live-link>`
+- **Cluster:** `devnet`
+- **Program ID (devnet):** `<YOUR_DEVNET_PROGRAM_ID>`
+- **Demo video (≤ 3 min):** `https://<loom-or-youtube-link>`
+- **Public build posts:**
+  - X: `https://x.com/<handle>/status/<id>`
+  - LinkedIn: `https://linkedin.com/posts/<id>`
+- **Team:**
+  - Name 1 — role
+  - Name 2 — role
+  - Name 3 — role (optional)
+  - Name 4 — role (optional)
+
+---
 
 ## Roadmap
 
-- Merkle-based finalized tally root generation and proof endpoint hardening
-- Multisig v2 (proposal timelocks, richer signer policy, execution windows)
-- Full adversarial and invariant test implementation
-- zk-friendly voter eligibility proofs
-- Formal verification of lifecycle and replay invariants
+- zk-friendly eligibility modules (`zkid`/`zkpassport` integrations)
+- richer tally-proof verification
+- indexer + analytics dashboard for election transparency
+- mobile-first voter onboarding
+
+---
 
 ## License
 
-MIT 
+MIT
