@@ -13,6 +13,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import SolanaProvider from "@/components/solana-provider";
 import Navbar from "@/components/navbar";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -112,6 +113,7 @@ export default function RootLayout({
           <main className="min-h-[calc(100dvh-3.5rem)]">{children}</main>
           <Toaster richColors closeButton />
         </SolanaProvider>
+        <Analytics />
       </body>
     </html>
   );
