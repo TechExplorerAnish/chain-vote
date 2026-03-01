@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AdminProtection } from "@/components/admin-protection";
 
 export const metadata: Metadata = {
     title: "Admin Panel",
@@ -16,5 +17,5 @@ export default function AdminLayout({
 }: {
     children: React.ReactNode;
 }) {
-    return children;
+    return <AdminProtection>{children}</AdminProtection>;
 }
