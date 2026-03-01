@@ -202,24 +202,32 @@ Includes deterministic phase-machine and adversarial flow checks.
 
 ---
 
-## Submission Links (fill before final submit)
+## Deployment & Links
 
-- **Live link:** `https://<your-live-link>`
-- **Cluster:** `devnet`
-- **Program ID (devnet):** `<YOUR_DEVNET_PROGRAM_ID>`
-- **Demo video (≤ 3 min):** `https://<loom-or-youtube-link>`
-- **Public build posts:**
-  - X: `https://x.com/<handle>/status/<id>`
-  - LinkedIn: `https://linkedin.com/posts/<id>`
-- **Team:**
-  - Name 1 — role
-  - Name 2 — role
-  - Name 3 — role (optional)
-  - Name 4 — role (optional)
+### Live Application
+
+- **Live Link:** https://chain-vote-peach.vercel.app
+- **Cluster:** Devnet
+- **Program ID:** `9JHuSg8vw8JNZ8RpyugiPejCSeY77uVs9ghRTfLe57cg`
+
+### Solana Explorer Links
+
+- **Program Account:** https://explorer.solana.com/address/9JHuSg8vw8JNZ8RpyugiPejCSeY77uVs9ghRTfLe57cg?cluster=devnet
+- **IDL Account:** https://explorer.solana.com/address/AkKhRoyRQFzmGEVkJk8QnomaERFP7iVgBikMJ4zSxveS?cluster=devnet
+
+### Access Information
+
+- **Judge PIN:** `hackathon2024` (for hackathon evaluation)
+- **Demo User:** Connect any Solana devnet wallet
+- **Faucet:** Use Solana Faucet to get devnet SOL for testing
 
 ---
 
-## Roadmap
+## Developer
+
+**Anish** — Full-stack development (Anchor program + Next.js frontend)
+
+---
 
 - zk-friendly eligibility modules (`zkid`/`zkpassport` integrations)
 - richer tally-proof verification
