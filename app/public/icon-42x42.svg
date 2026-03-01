@@ -1,0 +1,16 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="42" height="42">
+  <defs>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .icon-path { fill: #ffffff; }
+      }
+      @media (prefers-color-scheme: light) {
+        .icon-path { fill: #0F1B35; }
+      }
+    </style>
+  </defs>
+  <g class="icon-path">
+    <path fill="currentColor" d="M512 100c-227.6 0-412 184.4-412 412s184.4 412 412 412 412-184.4 412-412-184.4-412-412-412zm0 50c199.8 0 362 162.2 362 362s-162.2 362-362 362-362-162.2-362-362 162.2-362 362-362z"/>
+    <path fill="currentColor" d="M512 250c-144.7 0-262 117.3-262 262s117.3 262 262 262 262-117.3 262-262-117.3-262-262-262zm0 50c117.3 0 212 94.7 212 212s-94.7 212-212 212-212-94.7-212-212 94.7-212 212-212z"/>
+  </g>
+</svg>
