@@ -33,7 +33,7 @@ export function AdminAuthorizationGuide() {
                 <div>
                     <h3 className="mb-2 font-semibold">Example configuration:</h3>
                     <pre className="overflow-x-auto rounded bg-blue-100 p-2 text-xs dark:bg-blue-900">
-{`export const AUTHORIZED_ADMINS: string[] = [
+                        {`export const AUTHORIZED_ADMINS: string[] = [
     "HN7cABqLq46Es1jh92dQQisAq662SmxELPhJ1tKT1g3",
     "GJwrZyB7rnWV8FX3xqLnT1Xj7WqYH8kPGkZ5v3P9n4Aq",
 ];`}
