@@ -217,7 +217,7 @@ Includes deterministic phase-machine and adversarial flow checks.
 
 ### Access Information
 
-- **Judge PIN:** `hackathon2024` (for hackathon evaluation)
+- **Judge PIN:** `solanablockchain` (for hackathon evaluation)
 - **Demo User:** Connect any Solana devnet wallet
 - **Faucet:** Use Solana Faucet to get devnet SOL for testing
 

@@ -1,9 +1,11 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { JudgeModePinDialog } from "@/components/judge-mode-pin-dialog";
+import { JUDGE_MODE_PIN } from "@/lib/admin-config";
 
 interface AdminProtectionProps {
     children: ReactNode;
@@ -11,10 +13,11 @@ interface AdminProtectionProps {
 
 /**
  * Component that protects admin content from unauthorized access
- * Shows an error message if the user is not an authorized admin
+ * Supports judge mode with PIN-based access for hackathon evaluation
  */
 export function AdminProtection({ children }: AdminProtectionProps) {
     const { connected, isAuthorized, message } = useAdminAuth();
+    const [judgeAccessGranted, setJudgeAccessGranted] = useState(false);
 
     if (!connected) {
         return (
@@ -33,6 +36,18 @@ export function AdminProtection({ children }: AdminProtectionProps) {
     }
 
     if (!isAuthorized) {
+        // Show PIN dialog for judge mode if enabled
+        if (JUDGE_MODE_PIN && !judgeAccessGranted) {
+            return (
+                <JudgeModePinDialog onSuccess={() => setJudgeAccessGranted(true)} />
+            );
+        }
+
+        // If PIN was entered incorrectly or judge mode is off
+        if (JUDGE_MODE_PIN && judgeAccessGranted) {
+            return <>{children}</>;
+        }
+
         return (
             <div className="mx-auto max-w-4xl p-6">
                 <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950">
