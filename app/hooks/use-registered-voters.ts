@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { getReadOnlyProgram } from "@/lib/program";
+import { getElectionPda } from "@/lib/pda";
 import type { WhitelistEntryAccount, VoterRecordAccount } from "@/lib/types";
 
 export interface RegisteredVoter {
@@ -26,28 +27,43 @@ export function useRegisteredVoters(electionPda: string | undefined, externalTri
             setError(null);
             try {
                 const program = getReadOnlyProgram();
-                const electionKey = new PublicKey(electionPda);
+
+                // electionPda could be either the admin key or the election PDA itself
+                // Try to derive the election PDA from the admin key
+                let electionKey: PublicKey;
+                try {
+                    const adminKey = new PublicKey(electionPda);
+                    const [derivedElectionPda] = getElectionPda(adminKey);
+                    electionKey = derivedElectionPda;
+                    console.log("Derived election PDA from admin key:", electionKey.toBase58());
+                } catch {
+                    // If derivation fails, treat electionPda as the election PDA directly
+                    electionKey = new PublicKey(electionPda);
+                    console.log("Using provided election PDA:", electionKey.toBase58());
+                }
 
                 // Fetch all whitelist entries for this election
-                const whitelistAccounts = await program.account.whitelistEntry.all([
-                    {
-                        memcmp: {
-                            offset: 8, // After discriminator (8 bytes)
-                            // memcmp bytes must be base58 for Pubkey filters
-                            bytes: electionKey.toBase58(),
-                        },
-                    },
-                ]);
+                const allWhitelistAccounts = await program.account.whitelistEntry.all();
+                console.log("Total whitelist entries in program:", allWhitelistAccounts.length);
 
-                // Fetch all voter records for this election once
-                const voterRecordAccounts = await program.account.voterRecord.all([
-                    {
-                        memcmp: {
-                            offset: 8, // After discriminator (8 bytes)
-                            bytes: electionKey.toBase58(),
-                        },
-                    },
-                ]);
+                // Filter manually to match the election
+                const whitelistAccounts = allWhitelistAccounts.filter((wl: any) => {
+                    const whitelistData = wl.account as WhitelistEntryAccount;
+                    return whitelistData.election.toBase58() === electionKey.toBase58();
+                });
+
+                console.log("Whitelist entries for this election:", whitelistAccounts.length);
+
+                // Fetch all voter records for this election
+                const allVoterRecordAccounts = await program.account.voterRecord.all();
+                console.log("Total voter records in program:", allVoterRecordAccounts.length);
+
+                const voterRecordAccounts = allVoterRecordAccounts.filter((vr: any) => {
+                    const voterRecordData = vr.account as VoterRecordAccount;
+                    return voterRecordData.election.toBase58() === electionKey.toBase58();
+                });
+
+                console.log("Voter records for this election:", voterRecordAccounts.length);
 
                 const voterRecordByVoter = new Map<string, VoterRecordAccount>();
                 for (const vr of voterRecordAccounts) {
@@ -73,6 +89,7 @@ export function useRegisteredVoters(electionPda: string | undefined, externalTri
                     })
                 );
 
+                console.log("Final voters data:", votersData);
                 setVoters(votersData);
             } catch (err) {
                 console.error("Error fetching registered voters:", err);

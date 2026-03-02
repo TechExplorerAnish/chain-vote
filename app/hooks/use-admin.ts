@@ -461,10 +461,10 @@ export function useRegisterVoter() {
 
                 return tx;
             } catch (err) {
-                const { description } = parseError(err);
+                const { title, description } = parseError(err);
                 setError(description);
                 console.error("Register voter error:", err);
-                throw new Error(description);
+                throw new Error(`${title}: ${description}`);
             } finally {
                 setLoading(false);
             }
