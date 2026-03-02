@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  Search,
+  ArrowRight
+} from "lucide-react";
 
 export default function Home() {
   const router = useRouter();
@@ -25,8 +29,7 @@ export default function Home() {
     "@context": "https://schema.org",
     "@type": "WebApplication",
     name: "Chain Vote",
-    description:
-      "Secure blockchain-based governance voting protocol with commit-reveal privacy on Solana",
+    description: "Secure blockchain-based governance voting protocol with commit-reveal privacy on Solana",
     applicationCategory: "GovernmentApplication",
     operatingSystem: "Web",
     offers: {
@@ -51,20 +54,19 @@ export default function Home() {
       <div className="mx-auto max-w-4xl space-y-8 p-6">
         {/* Hero */}
         <section className="space-y-4 pt-8 text-center">
-          <Badge variant="secondary">Solana · Anchor · Commit-Reveal</Badge>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Chain Vote Governance Protocol
+          <Badge variant="secondary">Solana · Anchor · Blockchain</Badge>
+          <h1 className="text-4xl font-bold mx-auto text-center tracking-tight sm:text-5xl">
+            Chain Vote
           </h1>
-          <p className="mx-auto max-w-2xl text-muted-foreground">
-            A blockchain voting protocol with deterministic PDAs, commit-reveal
-            privacy, multisig governance, and transparent on-chain audit trails.
+          <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
+            Secure governance voting on the blockchain
           </p>
-          <div className="flex justify-center gap-3">
-            <Link href="/admin">
-              <Button>Admin Panel</Button>
+          <div className="flex justify-center gap-3 flex-wrap">
+            <Link href="/about">
+              <Button size="lg">Learn More <ArrowRight className="ml-2 h-4 w-4" /></Button>
             </Link>
-            <Link href="/documentation">
-              <Button variant="outline">Documentation</Button>
+            <Link href="/admin">
+              <Button size="lg" variant="outline">Admin Panel</Button>
             </Link>
           </div>
         </section>
@@ -73,12 +75,14 @@ export default function Home() {
 
         {/* Election Lookup */}
         <section>
-          <Card>
+          <Card className="border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20">
             <CardHeader>
-              <CardTitle>View Election</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                View Election
+              </CardTitle>
               <CardDescription>
-                Enter the admin public key that initialized the election to view its
-                live status, candidates, and results.
+                Enter the admin public key to view election details and results
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -93,80 +97,13 @@ export default function Home() {
                   onKeyDown={(e) => e.key === "Enter" && handleLookup()}
                 />
               </div>
-              <Button onClick={handleLookup} disabled={!adminKey.trim()}>
+              <Button onClick={handleLookup} disabled={!adminKey.trim()} className="w-full">
+                <Search className="mr-2 h-4 w-4" />
                 View Election
               </Button>
             </CardContent>
           </Card>
         </section>
-
-        {/* Features */}
-        <section className="grid gap-4 sm:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Commit-Reveal Voting</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Votes are committed as SHA-256 hashes with nonce and salt. Revealed
-              only after the voting window closes, ensuring ballot privacy.
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Multisig Governance</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Admin actions require governance proposals with threshold-based
-              approval. Replay-safe with nonce and expiry validation.
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Deterministic PDAs</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Election, candidate, voter, and whitelist accounts are derived from
-              deterministic seeds — no off-chain state needed.
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">On-Chain Audit Trail</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Every action emits Anchor events. Final tally root and proof URI
-              committed on-chain for transparent verifiability.
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* Lifecycle */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Election Lifecycle</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              {[
-                "Created",
-                "Registration",
-                "Voting",
-                "Reveal",
-                "Finalized",
-              ].map((phase, i) => (
-                <span key={phase} className="flex items-center gap-2">
-                  <Badge variant={i === 0 ? "default" : "outline"}>{phase}</Badge>
-                  {i < 4 && <span className="text-muted-foreground">→</span>}
-                </span>
-              ))}
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Forward-only phase transitions enforced on-chain. Each transition
-              requires an executed governance proposal. Finalization requires
-              tally root commitment and complete vote reveals.
-            </p>
-          </CardContent>
-        </Card>
       </div>
     </>
   );

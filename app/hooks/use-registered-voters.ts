@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { getReadOnlyProgram } from "@/lib/program";
+import { getElectionPda } from "@/lib/pda";
 import type { WhitelistEntryAccount, VoterRecordAccount } from "@/lib/types";
 
 export interface RegisteredVoter {
@@ -26,28 +27,38 @@ export function useRegisteredVoters(electionPda: string | undefined, externalTri
             setError(null);
             try {
                 const program = getReadOnlyProgram();
-                const electionKey = new PublicKey(electionPda);
+                const inputKey = new PublicKey(electionPda);
 
-                // Fetch all whitelist entries for this election
-                const whitelistAccounts = await program.account.whitelistEntry.all([
-                    {
-                        memcmp: {
-                            offset: 8, // After discriminator (8 bytes)
-                            // memcmp bytes must be base58 for Pubkey filters
-                            bytes: electionKey.toBase58(),
-                        },
-                    },
-                ]);
+                // Fetch all whitelist entries once
+                const allWhitelistAccounts = await program.account.whitelistEntry.all();
 
-                // Fetch all voter records for this election once
-                const voterRecordAccounts = await program.account.voterRecord.all([
-                    {
-                        memcmp: {
-                            offset: 8, // After discriminator (8 bytes)
-                            bytes: electionKey.toBase58(),
-                        },
-                    },
-                ]);
+                // Try to find matching voters using the input key directly
+                let whitelistAccounts = allWhitelistAccounts.filter((wl: any) => {
+                    const whitelistData = wl.account as WhitelistEntryAccount;
+                    return whitelistData.election.toBase58() === inputKey.toBase58();
+                });
+
+                // If no matches, try deriving from input as admin key
+                if (whitelistAccounts.length === 0) {
+                    const [derivedPda] = getElectionPda(inputKey);
+
+                    whitelistAccounts = allWhitelistAccounts.filter((wl: any) => {
+                        const whitelistData = wl.account as WhitelistEntryAccount;
+                        return whitelistData.election.toBase58() === derivedPda.toBase58();
+                    });
+                }
+
+                // Determine which key we're using
+                const electionKey = whitelistAccounts.length > 0
+                    ? new PublicKey(whitelistAccounts[0].account.election)
+                    : inputKey;
+
+                // Fetch all voter records for this election
+                const allVoterRecordAccounts = await program.account.voterRecord.all();
+                const voterRecordAccounts = allVoterRecordAccounts.filter((vr: any) => {
+                    const voterRecordData = vr.account as VoterRecordAccount;
+                    return voterRecordData.election.toBase58() === electionKey.toBase58();
+                });
 
                 const voterRecordByVoter = new Map<string, VoterRecordAccount>();
                 for (const vr of voterRecordAccounts) {
@@ -55,23 +66,21 @@ export function useRegisteredVoters(electionPda: string | undefined, externalTri
                     voterRecordByVoter.set(record.voter.toBase58(), record);
                 }
 
-                // For each whitelist entry, try to fetch their voter record
-                const votersData = await Promise.all(
-                    whitelistAccounts.map(async (wl: any) => {
-                        const whitelistData = wl.account as WhitelistEntryAccount;
-                        const voterAddress = whitelistData.voter.toBase58();
-                        const voterRecord = voterRecordByVoter.get(voterAddress) ?? null;
+                // For each whitelist entry, build the voter data
+                const votersData = whitelistAccounts.map((wl: any) => {
+                    const whitelistData = wl.account as WhitelistEntryAccount;
+                    const voterAddress = whitelistData.voter.toBase58();
+                    const voterRecord = voterRecordByVoter.get(voterAddress) ?? null;
 
-                        return {
-                            voterAddress,
-                            isActive: whitelistData.isActive,
-                            hasCommitted: voterRecord?.hasCommitted || false,
-                            hasRevealed: voterRecord?.hasRevealed || false,
-                            committedAt: voterRecord?.committedAt,
-                            revealedAt: voterRecord?.revealedAt,
-                        };
-                    })
-                );
+                    return {
+                        voterAddress,
+                        isActive: whitelistData.isActive,
+                        hasCommitted: voterRecord?.hasCommitted || false,
+                        hasRevealed: voterRecord?.hasRevealed || false,
+                        committedAt: voterRecord?.committedAt,
+                        revealedAt: voterRecord?.revealedAt,
+                    };
+                });
 
                 setVoters(votersData);
             } catch (err) {

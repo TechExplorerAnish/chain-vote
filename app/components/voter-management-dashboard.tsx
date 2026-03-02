@@ -6,11 +6,20 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { useRegisteredVoters } from "@/hooks/use-registered-voters";
 import { VoterConfirmationDialog } from "./voter-confirmation-dialog";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import {
+    Trash2,
+    Users,
+    History,
+    CheckCircle2,
+    AlertCircle,
+    BarChart3,
+    Clock
+} from "lucide-react";
 
 interface Props {
     electionPda: string;
@@ -146,6 +155,7 @@ export default function VoterManagementDashboard({ electionPda, refetchTrigger, 
 
     // Filter out invalid voters for display
     const validVoters = voters.filter(v => !invalidVoters.has(v.voterAddress));
+
     const totalPages = Math.ceil(validVoters.length / VOTERS_PER_PAGE);
     const startIndex = (currentPage - 1) * VOTERS_PER_PAGE;
     const endIndex = startIndex + VOTERS_PER_PAGE;
@@ -160,16 +170,66 @@ export default function VoterManagementDashboard({ electionPda, refetchTrigger, 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Registered Voters</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Registered Voters
+                </CardTitle>
                 <CardDescription>
                     {voterCount} total • {validVoters.length} valid • {invalidVoters.size} invalid • {committedCount} committed ({participationRate}%) • {revealedCount} revealed ({revealRate}% of committed)
                 </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Total</p>
+                            <p className="text-sm font-semibold">{voterCount}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3">
+                        <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Valid</p>
+                            <p className="text-sm font-semibold">{validVoters.length}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3">
+                        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Invalid</p>
+                            <p className="text-sm font-semibold">{invalidVoters.size}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Committed</p>
+                            <p className="text-sm font-semibold">{committedCount}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3">
+                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Revealed</p>
+                            <p className="text-sm font-semibold">{revealedCount}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <Separator />
+
                 <Tabs defaultValue="voters" className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="voters">Voters ({validVoters.length})</TabsTrigger>
-                        <TabsTrigger value="audit">Audit Log ({auditLog.length})</TabsTrigger>
+                        <TabsTrigger value="voters" className="flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Voters ({validVoters.length})
+                        </TabsTrigger>
+                        <TabsTrigger value="audit" className="flex items-center gap-2">
+                            <History className="h-4 w-4" />
+                            Audit Log ({auditLog.length})
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="voters" className="mt-4 space-y-4">

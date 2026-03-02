@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 export async function generateMetadata({
     params,
 }: {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-    const electionId = params.id;
+    const { id: electionId } = await params;
 
     return {
         title: `Election ${electionId.slice(0, 8)}...`,

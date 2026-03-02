@@ -26,6 +26,18 @@ export function parseError(err: unknown): { title: string; description: string }
 
     // Parse Anchor AnchorError
     if (message.includes("AnchorError")) {
+      if (message.includes("InvalidTimeRange")) {
+        return {
+          title: "Invalid Time Range",
+          description: "End time must be after start time.",
+        };
+      }
+      if (message.includes("ProposalNotExecutable")) {
+        return {
+          title: "Proposal Not Ready",
+          description: "The proposal hasn't reached the approval threshold yet. Get more admin approvals before executing.",
+        };
+      }
       if (message.includes("InvalidActionHash")) {
         return {
           title: "Invalid Action Hash",
@@ -66,17 +78,31 @@ export function parseError(err: unknown): { title: string; description: string }
 
     // Parse Solana transaction errors
     if (message.includes("already in use")) {
+      // Check if this is a voter registration duplicate
+      if (message.includes("RegisterVoter") || message.toLowerCase().includes("whitelist")) {
+        return {
+          title: "Voter Already Registered",
+          description: "This voter has already been registered for this election. Each voter can only be registered once.",
+        };
+      }
       return {
         title: "Account Already Exists",
         description: "A proposal with this nonce already exists. Try using a different nonce number.",
       };
     }
     if (message.includes("Simulation failed")) {
+      // Check for duplicate voter registration
+      if (message.includes("RegisterVoter") && message.includes("0x0") && message.includes("already in use")) {
+        return {
+          title: "Voter Already Registered",
+          description: "This voter has already been registered for this election. Each voter can only be registered once. (No SOL was charged - transaction was rejected during simulation)",
+        };
+      }
       const simError = message.split("Error processing Instruction")[1];
       if (simError && simError.includes("0x0")) {
         return {
           title: "Transaction Failed",
-          description: "The account may already exist. Try using a different proposal nonce.",
+          description: "The account may already exist. Check your inputs or try a different value.",
         };
       }
       return {

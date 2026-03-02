@@ -3,88 +3,215 @@
 import { useCallback, useEffect, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import PhaseBadge from "@/components/phase-badge";
-import PhaseTiming from "@/components/phase-timing";
-import VoterManagementDashboard from "@/components/voter-management-dashboard";
-import { VoterConfirmationDialog } from "@/components/voter-confirmation-dialog";
-import { useElectionAccount } from "@/hooks/use-election-account";
-import { useRegisteredVoters } from "@/hooks/use-registered-voters";
-import {
-    useInitializeMultisig,
-    useCreateProposal,
-    useApproveProposal,
-    useExecuteProposal,
-    useInitializeElection,
-    usePhaseTransition,
-    useAddCandidate,
-    useRegisterVoter,
-    usePublishTallyRoot,
-    useMultisigAccount,
-    useProposalAccount,
-    hashInitializeElectionAction,
-    hashTransitionPhaseAction,
-    hashPublishTallyRootAction,
-} from "@/hooks/use-admin";
-import type { ProposalAccountData } from "@/hooks/use-admin";
-import { GovernanceAction, ElectionPhase, PHASE_LABELS } from "@/lib/types";
-import { getMultisigPda, getElectionPda, getProposalPda } from "@/lib/pda";
-import { getConnection } from "@/lib/program";
-import { parseError } from "@/lib/utils";
+import { useMultisigRegistry } from "@/hooks/use-multisig-registry";
+import { getMultisigPda, getProposalPda } from "@/lib/pda";
+import { getReadOnlyProgram } from "@/lib/program";
+import { ShieldCheck, Bell, Vote, Scale, UserPlus, Users, Settings } from "lucide-react";
 
-function toLocalDateTimeInput(unixSeconds: bigint): string {
-    const d = new Date(Number(unixSeconds) * 1000);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const hh = String(d.getHours()).padStart(2, "0");
-    const min = String(d.getMinutes()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-    const normalized = hex.trim().toLowerCase();
-    return new Uint8Array(
-        normalized.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
-    );
-}
-
-async function getChainNowSec(): Promise<bigint> {
-    try {
-        const connection = getConnection();
-        const slot = await connection.getSlot("processed");
-        const blockTime = await connection.getBlockTime(slot);
-        if (typeof blockTime === "number") {
-            return BigInt(blockTime);
-        }
-    } catch {
-        // Fall back to local clock if RPC time lookup fails.
-    }
-    return BigInt(Math.floor(Date.now() / 1000));
-}
+import { MultisigSection } from "@/components/admin/multisig-section";
+import { ElectionSection } from "@/components/admin/election-section";
+import { GovernanceSection } from "@/components/admin/governance-section";
+import { CandidateSection } from "@/components/admin/candidate-section";
+import { VotersSection } from "@/components/admin/voters-section";
+import { NotificationsSection, type PendingApprovalItem } from "@/components/admin/notifications-section";
 
 export default function AdminPage() {
     const { connected, publicKey } = useWallet();
     const [adminKeyInput, setAdminKeyInput] = useState("");
+    const [adminKeyManuallyEdited, setAdminKeyManuallyEdited] = useState(false);
+    const { findMultisigsByAdmin } = useMultisigRegistry();
+    const [prefetchedNotifications, setPrefetchedNotifications] = useState<PendingApprovalItem[]>([]);
+    const [notificationsLoading, setNotificationsLoading] = useState(false);
 
     useEffect(() => {
-        if (publicKey) setAdminKeyInput(publicKey.toBase58());
+        if (!publicKey) return;
+        setAdminKeyManuallyEdited(false);
+        setAdminKeyInput(publicKey.toBase58());
     }, [publicKey]);
+
+    // Use Pinata multisig authority to align UI for other admins in the same multisig.
+    useEffect(() => {
+        if (!publicKey || adminKeyManuallyEdited) return;
+
+        let cancelled = false;
+
+        const resolveAuthorityFromPinata = async () => {
+            try {
+                const walletKey = publicKey.toBase58();
+                const multisigs = await findMultisigsByAdmin(walletKey);
+                if (!multisigs.length) return;
+
+                const candidates = multisigs
+                    .map((ms) => ms.authority)
+                    .filter((value): value is string => Boolean(value));
+                if (!candidates.length) return;
+
+                // Prefer authority that is not the currently connected wallet for collaborator admins.
+                const preferredAuthority =
+                    candidates.find((key) => key !== walletKey) ??
+                    candidates[0];
+
+                // Validate key format before applying.
+                new PublicKey(preferredAuthority);
+
+                if (!cancelled) {
+                    setAdminKeyInput((prev) => {
+                        if (prev === "" || prev === walletKey) {
+                            return preferredAuthority;
+                        }
+                        return prev;
+                    });
+                }
+            } catch {
+                // Non-fatal fallback: admin can still input key manually.
+            }
+        };
+
+        resolveAuthorityFromPinata();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [publicKey, findMultisigsByAdmin, adminKeyManuallyEdited]);
+
+    // Prefetch notifications in background
+    const prefetchNotifications = useCallback(async () => {
+        if (!publicKey) {
+            setPrefetchedNotifications([]);
+            return;
+        }
+
+        setNotificationsLoading(true);
+        try {
+            const adminWallet = publicKey.toBase58();
+            const multisigs = await findMultisigsByAdmin(adminWallet);
+            const program = getReadOnlyProgram();
+            const pending: PendingApprovalItem[] = [];
+
+            for (const ms of multisigs) {
+                let multisigPda: PublicKey;
+                try {
+                    multisigPda = ms.multisigPda
+                        ? new PublicKey(ms.multisigPda)
+                        : getMultisigPda(new PublicKey(ms.authority))[0];
+                } catch {
+                    continue;
+                }
+
+                let multisigAccount: any;
+                try {
+                    multisigAccount = await program.account.adminMultisig.fetch(multisigPda);
+                } catch {
+                    continue;
+                }
+
+                const adminCount = multisigAccount.adminCount as number;
+                const threshold = multisigAccount.threshold as number;
+                const admins = (multisigAccount.admins as PublicKey[]).slice(0, adminCount);
+                const adminIndex = admins.findIndex((a) => a.toBase58() === adminWallet);
+                if (adminIndex < 0) continue;
+
+                const proposalNonce = Number(
+                    BigInt((multisigAccount.proposalNonce as { toString(): string }).toString())
+                );
+
+                const proposalFetches = Array.from({ length: proposalNonce }, (_, nonce) => {
+                    const [proposalPda] = getProposalPda(multisigPda, BigInt(nonce));
+                    return program.account.governanceProposal.fetch(proposalPda)
+                        .then((proposal: any) => ({ proposalPda, proposal }))
+                        .catch(() => null);
+                });
+
+                const proposalResults = await Promise.all(proposalFetches);
+                for (const result of proposalResults) {
+                    if (!result) continue;
+
+                    const { proposalPda, proposal } = result;
+                    const approvals = (proposal.approvals as boolean[]).slice(0, adminCount);
+                    const alreadyApproved = Boolean(approvals[adminIndex]);
+                    const executed = Boolean(proposal.executed);
+                    const consumed = Boolean(proposal.consumed);
+
+                    if (alreadyApproved || executed || consumed) continue;
+
+                    pending.push({
+                        multisigAuthority: ms.authority,
+                        multisigPda,
+                        threshold,
+                        adminCount,
+                        proposalPda,
+                        nonce: BigInt((proposal.nonce as { toString(): string }).toString()),
+                        proposer: proposal.proposer as PublicKey,
+                        actionLabel: parseActionLabel(proposal.action),
+                        approvalCount: proposal.approvalCount as number,
+                        createdAt: BigInt((proposal.createdAt as { toString(): string }).toString()),
+                        expiresAt: BigInt((proposal.expiresAt as { toString(): string }).toString()),
+                    });
+                }
+            }
+
+            pending.sort((a, b) => Number(b.createdAt - a.createdAt));
+            setPrefetchedNotifications(pending);
+        } catch (err) {
+            setPrefetchedNotifications([]);
+        } finally {
+            setNotificationsLoading(false);
+        }
+    }, [publicKey, findMultisigsByAdmin]);
+
+    useEffect(() => {
+        prefetchNotifications();
+    }, [prefetchNotifications]);
+
+    // Keep notifications synced even when the Notifications tab is not open.
+    useEffect(() => {
+        const program = getReadOnlyProgram();
+        const listenerHandles: number[] = [];
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const refreshWithRetry = () => {
+            prefetchNotifications();
+            if (retryTimer) clearTimeout(retryTimer);
+            retryTimer = setTimeout(() => {
+                prefetchNotifications();
+            }, 1200);
+        };
+
+        const setupListeners = async () => {
+            try {
+                listenerHandles.push(
+                    await program.addEventListener("GovernanceProposalCreated", () => {
+                        refreshWithRetry();
+                    })
+                );
+                listenerHandles.push(
+                    await program.addEventListener("GovernanceProposalApproved", () => {
+                        refreshWithRetry();
+                    })
+                );
+                listenerHandles.push(
+                    await program.addEventListener("GovernanceProposalExecuted", () => {
+                        refreshWithRetry();
+                    })
+                );
+            } catch {
+                // Non-fatal: manual refresh still works.
+            }
+        };
+
+        setupListeners();
+
+        return () => {
+            if (retryTimer) clearTimeout(retryTimer);
+            listenerHandles.forEach((handle) => {
+                program.removeEventListener(handle);
+            });
+        };
+    }, [prefetchNotifications]);
 
     if (!connected || !publicKey) {
         return (
@@ -98,8 +225,11 @@ export default function AdminPage() {
 
     return (
         <div className="mx-auto max-w-4xl space-y-6 p-6">
-            <div>
-                <h1 className="text-2xl font-bold">Admin Panel</h1>
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <Settings className="h-6 w-6" />
+                    <h1 className="text-2xl font-bold">Admin Panel</h1>
+                </div>
                 <p className="text-sm text-muted-foreground">
                     Governance controls for the Chain Vote protocol
                 </p>
@@ -110,7 +240,10 @@ export default function AdminPage() {
                 <Input
                     id="admin-key"
                     value={adminKeyInput}
-                    onChange={(e) => setAdminKeyInput(e.target.value)}
+                    onChange={(e) => {
+                        setAdminKeyManuallyEdited(true);
+                        setAdminKeyInput(e.target.value);
+                    }}
                     placeholder="Admin public key"
                     className="font-mono text-sm"
                 />
@@ -118,15 +251,42 @@ export default function AdminPage() {
 
             <Tabs defaultValue="multisig">
                 <TabsList className="flex-wrap">
-                    <TabsTrigger value="multisig">Multisig</TabsTrigger>
-                    <TabsTrigger value="election">Election</TabsTrigger>
-                    <TabsTrigger value="governance">Governance</TabsTrigger>
-                    <TabsTrigger value="candidates">Candidates</TabsTrigger>
-                    <TabsTrigger value="voters">Voters</TabsTrigger>
+                    <TabsTrigger value="multisig">
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        Multisig
+                    </TabsTrigger>
+                    <TabsTrigger value="notifications">
+                        <Bell className="mr-2 h-4 w-4" />
+                        Notifications
+                    </TabsTrigger>
+                    <TabsTrigger value="election">
+                        <Vote className="mr-2 h-4 w-4" />
+                        Election
+                    </TabsTrigger>
+                    <TabsTrigger value="governance">
+                        <Scale className="mr-2 h-4 w-4" />
+                        Governance
+                    </TabsTrigger>
+                    <TabsTrigger value="candidates">
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Candidates
+                    </TabsTrigger>
+                    <TabsTrigger value="voters">
+                        <Users className="mr-2 h-4 w-4" />
+                        Voters
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="multisig" className="mt-4">
                     <MultisigSection />
+                </TabsContent>
+
+                <TabsContent value="notifications" className="mt-4">
+                    <NotificationsSection
+                        prefetchedItems={prefetchedNotifications}
+                        prefetchLoading={notificationsLoading}
+                        onRefresh={prefetchNotifications}
+                    />
                 </TabsContent>
 
                 <TabsContent value="election" className="mt-4">
@@ -134,7 +294,7 @@ export default function AdminPage() {
                 </TabsContent>
 
                 <TabsContent value="governance" className="mt-4">
-                    <GovernanceSection adminKey={adminKeyInput} />
+                    <GovernanceSection adminKey={adminKeyInput} onProposalChanged={prefetchNotifications} />
                 </TabsContent>
 
                 <TabsContent value="candidates" className="mt-4">
@@ -142,1292 +302,27 @@ export default function AdminPage() {
                 </TabsContent>
 
                 <TabsContent value="voters" className="mt-4">
-                    <VotersTabContent adminKey={adminKeyInput} />
+                    <VotersSection adminKey={adminKeyInput} />
                 </TabsContent>
             </Tabs>
         </div>
     );
 }
 
-/* ── Multisig Setup ──────────────────────────────────────── */
+function parseActionLabel(actionObj: unknown): string {
+    const ACTION_LABELS: Record<number, string> = {
+        0: "Initialize Election",
+        1: "Transition Phase",
+        2: "Publish Tally Root",
+    };
 
-function MultisigSection() {
-    const { publicKey } = useWallet();
-    const { initialize, loading } = useInitializeMultisig();
-    const [adminsInput, setAdminsInput] = useState("");
-    const [threshold, setThreshold] = useState("1");
-    const MAX_ADMINS = 5;
-
-    const handleInit = useCallback(async () => {
-        if (!publicKey) return;
-        const rawAdmins = adminsInput
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-
-        if (rawAdmins.length === 0) {
-            toast.error("Provide at least one admin key");
-            return;
-        }
-
-        if (rawAdmins.length > MAX_ADMINS) {
-            toast.error(`Maximum ${MAX_ADMINS} admins allowed`);
-            return;
-        }
-
-        let adminKeys: PublicKey[] = [];
-        try {
-            adminKeys = rawAdmins.map((s) => new PublicKey(s));
-        } catch {
-            toast.error("One or more admin public keys are invalid");
-            return;
-        }
-
-        const uniqueKeys = new Set(adminKeys.map((k) => k.toBase58()));
-        if (uniqueKeys.size !== adminKeys.length) {
-            toast.error("Admin keys must be unique");
-            return;
-        }
-
-        const thresholdValue = Number.parseInt(threshold, 10);
-        if (!Number.isInteger(thresholdValue) || thresholdValue <= 0) {
-            toast.error("Threshold must be a positive integer");
-            return;
-        }
-
-        if (thresholdValue > adminKeys.length) {
-            toast.error("Threshold cannot exceed number of admins");
-            return;
-        }
-
-        if (thresholdValue > MAX_ADMINS) {
-            toast.error(`Threshold cannot exceed ${MAX_ADMINS}`);
-            return;
-        }
-
-        try {
-            const tx = await initialize(adminKeys, thresholdValue);
-            toast.success("Multisig initialized!", { description: `Tx: ${tx.slice(0, 16)}…` });
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, adminsInput, threshold, initialize]);
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Initialize Multisig</CardTitle>
-                <CardDescription>
-                    Set up the admin multisig. PDA seed: [&quot;multisig&quot;, payer].
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="space-y-2">
-                    <Label>Admin Public Keys (comma-separated)</Label>
-                    <Input
-                        value={adminsInput}
-                        onChange={(e) => setAdminsInput(e.target.value)}
-                        placeholder="Key1, Key2, Key3"
-                        className="font-mono text-xs"
-                    />
-                </div>
-                <div className="space-y-2">
-                    <Label>Threshold</Label>
-                    <Input
-                        type="number"
-                        min={1}
-                        max={5}
-                        value={threshold}
-                        onChange={(e) => setThreshold(e.target.value)}
-                    />
-                </div>
-                <Button onClick={handleInit} disabled={loading}>
-                    {loading ? "Initializing…" : "Initialize Multisig"}
-                </Button>
-            </CardContent>
-        </Card>
-    );
-}
-
-/* ── Election Init + Status ──────────────────────────────── */
-
-function ElectionSection({ adminKey }: { adminKey: string }) {
-    const { election, loading: elLoading, refetch } = useElectionAccount(adminKey);
-    const { initializeElection, loading } = useInitializeElection();
-    const { publicKey } = useWallet();
-
-    const [msAuthority, setMsAuthority] = useState("");
-    const [proposalNonce, setProposalNonce] = useState("");
-    const [proposalNonceTouched, setProposalNonceTouched] = useState(false);
-    const [title, setTitle] = useState("");
-    const [startTime, setStartTime] = useState("");
-    const [endTime, setEndTime] = useState("");
-    const [autofillHint, setAutofillHint] = useState<string | null>(null);
-
-    // Auto-fill nonce from multisig
-    const { multisig, fetchMultisig } = useMultisigAccount(msAuthority || undefined);
-    const { proposal, fetchProposal } = useProposalAccount(msAuthority || undefined, proposalNonce);
-
-    useEffect(() => {
-        if (msAuthority) {
-            try {
-                new PublicKey(msAuthority);
-                fetchMultisig();
-            } catch { /* invalid key */ }
-        }
-    }, [msAuthority, fetchMultisig]);
-
-    useEffect(() => {
-        if (multisig && !proposalNonceTouched) {
-            const nextNonce = multisig.proposalNonce;
-            const suggestedNonce = nextNonce > 0n ? nextNonce - 1n : 0n;
-            setProposalNonce(suggestedNonce.toString());
-        }
-    }, [multisig, proposalNonceTouched]);
-
-    useEffect(() => {
-        if (!msAuthority || !proposalNonce) {
-            setAutofillHint(null);
-            return;
-        }
-
-        try {
-            new PublicKey(msAuthority);
-            fetchProposal();
-        } catch {
-            setAutofillHint(null);
-        }
-    }, [msAuthority, proposalNonce, fetchProposal]);
-
-    useEffect(() => {
-        if (!proposal || proposal.action !== GovernanceAction.InitializeElection || !proposal.hasInitElectionPayload) {
-            setAutofillHint(null);
-            return;
-        }
-
-        setTitle(proposal.initElectionTitle);
-        setStartTime(toLocalDateTimeInput(proposal.initElectionStartTime));
-        setEndTime(toLocalDateTimeInput(proposal.initElectionEndTime));
-        setAutofillHint("Auto-filled from on-chain InitializeElection proposal payload.");
-    }, [proposal]);
-
-    const handleInit = useCallback(async () => {
-        if (!publicKey) return;
-        if (!proposalNonce) {
-            toast.error("Proposal nonce required", {
-                description: "Enter the executed InitializeElection proposal nonce.",
-            });
-            return;
-        }
-        try {
-            const startUnix = BigInt(Math.floor(new Date(startTime).getTime() / 1000));
-            const endUnix = BigInt(Math.floor(new Date(endTime).getTime() / 1000));
-            const chainNow = await getChainNowSec();
-
-            if (startUnix < chainNow) {
-                toast.error("Start time is already in the past on-chain", {
-                    description:
-                        "This proposal can no longer initialize. Create a new InitializeElection proposal with a future start time.",
-                });
-                return;
-            }
-
-            const tx = await initializeElection(
-                new PublicKey(msAuthority),
-                BigInt(proposalNonce),
-                title,
-                startUnix,
-                endUnix
-            );
-            toast.success("Election initialized!", { description: `Tx: ${tx.slice(0, 16)}…` });
-            refetch();
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, msAuthority, proposalNonce, title, startTime, endTime, initializeElection, refetch]);
-
-    return (
-        <div className="space-y-4">
-            {election && (
-                <>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center justify-between">
-                                <span>Current Election</span>
-                                <PhaseBadge phase={election.phase} />
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Title</span>
-                                <span>{election.title}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Candidates</span>
-                                <span>{election.candidateCount}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Committed</span>
-                                <span>{election.totalCommittedVotes.toString()}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Revealed</span>
-                                <span>{election.totalRevealedVotes.toString()}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Tally Root</span>
-                                <Badge variant={election.finalTallyRootSet ? "default" : "outline"}>
-                                    {election.finalTallyRootSet ? "Set" : "Pending"}
-                                </Badge>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <PhaseTiming election={election} />
-                </>
-            )}
-
-            {!election && !elLoading && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Initialize Election</CardTitle>
-                        <CardDescription>
-                            Requires an executed governance proposal of type InitializeElection.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label>Multisig Authority Key</Label>
-                            <Input
-                                value={msAuthority}
-                                onChange={(e) => setMsAuthority(e.target.value)}
-                                placeholder="Multisig authority public key"
-                                className="font-mono text-xs"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label>Proposal Nonce</Label>
-                                {multisig && (
-                                    <span className="text-xs text-muted-foreground">
-                                        Next on-chain: {multisig.proposalNonce.toString()} · Usually use {multisig.proposalNonce > 0n ? (multisig.proposalNonce - 1n).toString() : "0"} to initialize
-                                    </span>
-                                )}
-                            </div>
-                            <Input
-                                type="number"
-                                value={proposalNonce}
-                                onChange={(e) => {
-                                    setProposalNonceTouched(true);
-                                    setProposalNonce(e.target.value);
-                                }}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Title</Label>
-                            <Input
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder="Election title"
-                            />
-                        </div>
-                        {autofillHint && (
-                            <p className="text-xs text-muted-foreground">{autofillHint}</p>
-                        )}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Start Time</Label>
-                                <Input
-                                    type="datetime-local"
-                                    value={startTime}
-                                    onChange={(e) => setStartTime(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>End Time</Label>
-                                <Input
-                                    type="datetime-local"
-                                    value={endTime}
-                                    onChange={(e) => setEndTime(e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        <Button onClick={handleInit} disabled={loading}>
-                            {loading ? "Initializing…" : "Initialize Election"}
-                        </Button>
-                    </CardContent>
-                </Card>
-            )}
-        </div>
-    );
-}
-
-/* ── Governance Proposals ─────────────────────────────────── */
-
-const ACTION_LABELS: Record<GovernanceAction, string> = {
-    [GovernanceAction.InitializeElection]: "Initialize Election",
-    [GovernanceAction.TransitionPhase]: "Transition Phase",
-    [GovernanceAction.PublishTallyRoot]: "Publish Tally Root",
-};
-
-function ProposalStatusCard({
-    proposal,
-    proposalPda,
-    loading,
-    error,
-}: {
-    proposal: ProposalAccountData | null;
-    proposalPda: PublicKey | null;
-    loading: boolean;
-    error: string | null;
-}) {
-    if (loading) {
-        return (
-            <Card>
-                <CardContent className="py-4">
-                    <p className="text-sm text-muted-foreground">Loading proposal…</p>
-                </CardContent>
-            </Card>
-        );
+    if (typeof actionObj === "number") {
+        return ACTION_LABELS[actionObj] ?? "Unknown";
     }
-
-    if (error) {
-        return (
-            <Card>
-                <CardContent className="py-4">
-                    <p className="text-sm text-muted-foreground">{error}</p>
-                </CardContent>
-            </Card>
-        );
+    if (actionObj && typeof actionObj === "object") {
+        if ("initializeElection" in actionObj) return "Initialize Election";
+        if ("transitionPhase" in actionObj) return "Transition Phase";
+        if ("publishTallyRoot" in actionObj) return "Publish Tally Root";
     }
-
-    if (!proposal) return null;
-
-    const now = BigInt(Math.floor(Date.now() / 1000));
-    const isExpired = proposal.expiresAt > 0n && now > proposal.expiresAt;
-    const approvedCount = proposal.approvals.filter(Boolean).length;
-
-    return (
-        <Card>
-            <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-base">
-                    <span>Proposal #{proposal.nonce.toString()}</span>
-                    <div className="flex gap-2">
-                        {proposal.executed && (
-                            <Badge variant="default">Executed</Badge>
-                        )}
-                        {proposal.consumed && (
-                            <Badge variant="secondary">Consumed</Badge>
-                        )}
-                        {!proposal.executed && !isExpired && (
-                            <Badge variant="outline">Pending</Badge>
-                        )}
-                        {isExpired && !proposal.executed && (
-                            <Badge variant="destructive">Expired</Badge>
-                        )}
-                    </div>
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                    <span className="text-muted-foreground">Action</span>
-                    <Badge variant="outline">{ACTION_LABELS[proposal.action]}</Badge>
-                </div>
-                <div className="flex justify-between">
-                    <span className="text-muted-foreground">Proposer</span>
-                    <span className="font-mono text-xs">
-                        {proposal.proposer.toBase58().slice(0, 8)}…{proposal.proposer.toBase58().slice(-4)}
-                    </span>
-                </div>
-                <div className="flex justify-between">
-                    <span className="text-muted-foreground">Approvals</span>
-                    <div className="flex items-center gap-2">
-                        <span className="font-medium">{approvedCount}</span>
-                        <div className="flex gap-1">
-                            {proposal.approvals.map((approved, i) => (
-                                <div
-                                    key={i}
-                                    className={`h-2 w-2 rounded-full ${approved
-                                        ? "bg-primary"
-                                        : "bg-muted"
-                                        }`}
-                                    title={`Admin ${i}: ${approved ? "Approved" : "Pending"}`}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-                <div className="flex justify-between">
-                    <span className="text-muted-foreground">Created</span>
-                    <span>{new Date(Number(proposal.createdAt) * 1000).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                    <span className="text-muted-foreground">Expires</span>
-                    <span className={isExpired ? "text-destructive" : ""}>
-                        {new Date(Number(proposal.expiresAt) * 1000).toLocaleString()}
-                    </span>
-                </div>
-                {proposalPda && (
-                    <div className="flex justify-between">
-                        <span className="text-muted-foreground">PDA</span>
-                        <span className="font-mono text-xs">
-                            {proposalPda.toBase58().slice(0, 12)}…{proposalPda.toBase58().slice(-4)}
-                        </span>
-                    </div>
-                )}
-                {proposal.executed && proposal.consumed && (
-                    <Alert>
-                        <AlertDescription>
-                            This proposal has been executed and consumed. It cannot be used again.
-                        </AlertDescription>
-                    </Alert>
-                )}
-                {proposal.executed && !proposal.consumed && (
-                    <Alert>
-                        <AlertDescription>
-                            This proposal is executed and ready to be consumed by its target instruction.
-                        </AlertDescription>
-                    </Alert>
-                )}
-            </CardContent>
-        </Card>
-    );
-}
-
-function GovernanceSection({ adminKey }: { adminKey: string }) {
-    const { publicKey } = useWallet();
-    const { createProposal, loading: createLoading } = useCreateProposal();
-    const { approveProposal, loading: approveLoading } = useApproveProposal();
-    const { executeProposal, loading: executeLoading } = useExecuteProposal();
-    const { transitionPhase, loading: transitionLoading } = usePhaseTransition();
-    const { publishTallyRoot, loading: publishLoading } = usePublishTallyRoot();
-    const { election, refetch: refetchElection } = useElectionAccount(adminKey);
-
-    // Create proposal form
-    const [msAuthority, setMsAuthority] = useState("");
-    const [actionType, setActionType] = useState<string>("");
-    const [expiryHours, setExpiryHours] = useState("24");
-
-    // Fetch multisig to auto-fill nonce
-    const { multisig, fetchMultisig } = useMultisigAccount(msAuthority || undefined);
-
-    // Auto-fetch multisig when authority changes
-    useEffect(() => {
-        if (msAuthority) {
-            try {
-                new PublicKey(msAuthority);
-                fetchMultisig();
-            } catch { /* invalid key */ }
-        }
-    }, [msAuthority, fetchMultisig]);
-
-    // Election details for InitializeElection proposal
-    const [electionTitle, setElectionTitle] = useState("");
-    const [electionStartTime, setElectionStartTime] = useState("");
-    const [electionEndTime, setElectionEndTime] = useState("");
-
-    // Phase for TransitionPhase proposal creation (hash input)
-    const [proposalPhase, setProposalPhase] = useState<string>("");
-
-    // Approve/Execute — auto-synced from chain
-    const [proposalNonceInput, setProposalNonceInput] = useState("");
-
-    // Auto-fill nonce from multisig account
-    useEffect(() => {
-        if (multisig && proposalNonceInput === "") {
-            setProposalNonceInput(multisig.proposalNonce.toString());
-        }
-    }, [multisig, proposalNonceInput]);
-
-    // Transition execution
-    const [nextPhase, setNextPhase] = useState<string>("");
-
-    // Publish Tally Root
-    const [tallyRootHex, setTallyRootHex] = useState("");
-    const [proofUri, setProofUri] = useState("");
-
-    // For transition, use the same nonce as the proposal
-    const transNonce = proposalNonceInput;
-
-    // ── Auto-fetch proposal status when authority + nonce are set ──
-    const {
-        proposal,
-        proposalPda,
-        loading: proposalLoading,
-        error: proposalError,
-        fetchProposal,
-    } = useProposalAccount(msAuthority || undefined, proposalNonceInput);
-
-    useEffect(() => {
-        if (msAuthority && proposalNonceInput !== "") {
-            try {
-                new PublicKey(msAuthority); // validate key format
-                fetchProposal();
-            } catch {
-                // invalid key, skip
-            }
-        }
-    }, [msAuthority, proposalNonceInput, fetchProposal]);
-
-    const handleCreateProposal = useCallback(async () => {
-        if (!publicKey || !msAuthority || !actionType) return;
-        if (proposalNonceInput === "") {
-            toast.error("Proposal nonce required", {
-                description: "Enter the nonce for this governance proposal.",
-            });
-            return;
-        }
-
-        try {
-            const msAuth = new PublicKey(msAuthority);
-            const [multisigPda] = getMultisigPda(msAuth);
-            const action = parseInt(actionType, 10) as GovernanceAction;
-
-            const nonceBigInt = BigInt(proposalNonceInput);
-            if (nonceBigInt < 0n) {
-                toast.error("Invalid proposal nonce", {
-                    description: "Nonce must be 0 or greater.",
-                });
-                return;
-            }
-
-            // Compute action hash + optional payload based on type
-            let actionHash: Uint8Array;
-            let initElectionTitleArg = "";
-            let initElectionStartTimeArg = 0n;
-            let initElectionEndTimeArg = 0n;
-            if (action === GovernanceAction.InitializeElection) {
-                // Validate election details are provided
-                if (!electionTitle || !electionStartTime || !electionEndTime) {
-                    toast.error("Election details required", {
-                        description: "Provide title, start time, and end time for InitializeElection proposal",
-                    });
-                    return;
-                }
-
-                const startTimeUnix = BigInt(Math.floor(new Date(electionStartTime).getTime() / 1000));
-                const endTimeUnix = BigInt(Math.floor(new Date(electionEndTime).getTime() / 1000));
-                const chainNow = await getChainNowSec();
-
-                if (startTimeUnix <= chainNow + 30n) {
-                    toast.error("Start time too close to current chain time", {
-                        description:
-                            "Set election start at least 30 seconds in the future to avoid StartTimeInPast at initialization.",
-                    });
-                    return;
-                }
-
-                initElectionTitleArg = electionTitle;
-                initElectionStartTimeArg = startTimeUnix;
-                initElectionEndTimeArg = endTimeUnix;
-
-                actionHash = await hashInitializeElectionAction(
-                    publicKey,
-                    electionTitle,
-                    startTimeUnix,
-                    endTimeUnix
-                );
-            } else if (action === GovernanceAction.TransitionPhase) {
-                if (!proposalPhase) {
-                    toast.error("Target phase required", {
-                        description: "Select the target phase for the TransitionPhase proposal.",
-                    });
-                    return;
-                }
-                const [elPda] = getElectionPda(new PublicKey(adminKey));
-                const phase = parseInt(proposalPhase, 10) as ElectionPhase;
-                actionHash = await hashTransitionPhaseAction(elPda, phase);
-            } else {
-                if (!tallyRootHex || tallyRootHex.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(tallyRootHex)) {
-                    toast.error("Invalid tally root", {
-                        description: "For PublishTallyRoot, enter a valid 64-char hex tally root.",
-                    });
-                    return;
-                }
-                if (!proofUri) {
-                    toast.error("Missing proof URI", {
-                        description: "For PublishTallyRoot, enter proof URI used to compute the action hash.",
-                    });
-                    return;
-                }
-                const [elPda] = getElectionPda(new PublicKey(adminKey));
-                const tallyRootBytes = hexToBytes(tallyRootHex);
-                actionHash = await hashPublishTallyRootAction(
-                    elPda,
-                    tallyRootBytes,
-                    proofUri
-                );
-            }
-
-            const expiresAt = BigInt(
-                Math.floor(Date.now() / 1000) + parseInt(expiryHours, 10) * 3600
-            );
-
-            // We need current nonce from multisig — use 0 as default
-            const tx = await createProposal(
-                multisigPda,
-                nonceBigInt,
-                action,
-                actionHash,
-                expiresAt,
-                initElectionTitleArg,
-                initElectionStartTimeArg,
-                initElectionEndTimeArg
-            );
-            toast.success("Proposal created!", { description: `Tx: ${tx.slice(0, 16)}…` });
-
-            setProposalNonceInput(nonceBigInt.toString());
-            fetchProposal();
-            fetchMultisig(); // re-fetch to auto-update nonce
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, msAuthority, actionType, proposalPhase, expiryHours, proposalNonceInput, adminKey, createProposal, electionTitle, electionStartTime, electionEndTime, tallyRootHex, proofUri, fetchProposal, fetchMultisig]);
-
-    const handleApprove = useCallback(async () => {
-        if (!publicKey || !msAuthority) return;
-        try {
-            const [multisigPda] = getMultisigPda(new PublicKey(msAuthority));
-            const [proposalPda] = getProposalPda(multisigPda, BigInt(proposalNonceInput));
-            const tx = await approveProposal(multisigPda, proposalPda);
-            toast.success("Proposal approved!", { description: `Tx: ${tx.slice(0, 16)}…` });
-            fetchProposal();
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, msAuthority, proposalNonceInput, approveProposal, fetchProposal]);
-
-    const handleExecute = useCallback(async () => {
-        if (!publicKey || !msAuthority) return;
-        try {
-            const [multisigPda] = getMultisigPda(new PublicKey(msAuthority));
-            const [proposalPda] = getProposalPda(multisigPda, BigInt(proposalNonceInput));
-            const tx = await executeProposal(multisigPda, proposalPda);
-            toast.success("Proposal executed!", { description: `Tx: ${tx.slice(0, 16)}…` });
-            fetchProposal();
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, msAuthority, proposalNonceInput, executeProposal, fetchProposal]);
-
-    const handleTransition = useCallback(async () => {
-        if (!publicKey) {
-            toast.error("Wallet not connected", { description: "Connect your wallet to continue." });
-            return;
-        }
-        if (!msAuthority) {
-            toast.error("Missing multisig authority", { description: "Enter the multisig authority key." });
-            return;
-        }
-        if (!nextPhase) {
-            toast.error("Missing target phase", { description: "Select the target phase to transition to." });
-            return;
-        }
-        if (!transNonce) {
-            toast.error("Missing proposal nonce", { description: "Enter the transition proposal nonce." });
-            return;
-        }
-
-        const phase = parseInt(nextPhase, 10) as ElectionPhase;
-
-        // ── Client-side hash pre-check ──
-        // Compute the expected action hash and compare to what's stored in the
-        // proposal BEFORE sending the transaction.  This catches mismatches caused
-        // by re-using a proposal that was created for a different target phase.
-        if (proposal) {
-            const [elPda] = getElectionPda(new PublicKey(adminKey));
-            const expectedHash = await hashTransitionPhaseAction(elPda, phase);
-            const storedHash = new Uint8Array(proposal.actionHash);
-            const hashesMatch =
-                expectedHash.length === storedHash.length &&
-                expectedHash.every((b, i) => b === storedHash[i]);
-
-            if (!hashesMatch) {
-                toast.error("Action hash mismatch", {
-                    description:
-                        `Proposal #${transNonce} was created for a different target phase. ` +
-                        `Create a new TransitionPhase proposal with "${PHASE_LABELS[phase]}" selected.`,
-                    duration: 8000,
-                });
-                return;
-            }
-        }
-
-        try {
-            const tx = await transitionPhase(
-                new PublicKey(adminKey),
-                new PublicKey(msAuthority),
-                phase,
-                BigInt(transNonce)
-            );
-            toast.success("Phase transitioned!", { description: `Tx: ${tx.slice(0, 16)}…` });
-            refetchElection();
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, nextPhase, msAuthority, adminKey, transNonce, proposal, transitionPhase, refetchElection]);
-
-    const handlePublishTally = useCallback(async () => {
-        if (!publicKey) {
-            toast.error("Wallet not connected", { description: "Connect your wallet to continue." });
-            return;
-        }
-        if (!msAuthority) {
-            toast.error("Missing multisig authority", { description: "Enter the multisig authority key." });
-            return;
-        }
-        if (!tallyRootHex || tallyRootHex.length !== 64) {
-            toast.error("Invalid tally root", { description: "Must be 64 hex characters (32 bytes)." });
-            return;
-        }
-        if (!/^[0-9a-fA-F]{64}$/.test(tallyRootHex)) {
-            toast.error("Invalid tally root", { description: "Tally root must be hexadecimal (0-9, a-f)." });
-            return;
-        }
-        if (!proofUri) {
-            toast.error("Missing proof URI", { description: "Enter the proof URI (IPFS/URL)." });
-            return;
-        }
-        if (!proposalNonceInput) {
-            toast.error("Missing proposal nonce", { description: "Enter the executed PublishTallyRoot proposal nonce." });
-            return;
-        }
-
-        try {
-            const tallyRootBytes = hexToBytes(tallyRootHex);
-            const [multisigPda] = getMultisigPda(new PublicKey(msAuthority));
-            const [elPda] = getElectionPda(new PublicKey(adminKey));
-
-            // Client-side hash pre-check to catch nonce/payload mismatch before tx.
-            if (proposal) {
-                const expectedHash = await hashPublishTallyRootAction(elPda, tallyRootBytes, proofUri);
-                const storedHash = new Uint8Array(proposal.actionHash);
-                const hashesMatch =
-                    expectedHash.length === storedHash.length &&
-                    expectedHash.every((b, i) => b === storedHash[i]);
-
-                if (!hashesMatch) {
-                    toast.error("Action hash mismatch", {
-                        description:
-                            `Proposal #${proposalNonceInput} was created with different tally root/proof URI. ` +
-                            "Use the exact same values used when creating PublishTallyRoot proposal.",
-                        duration: 8000,
-                    });
-                    return;
-                }
-            }
-
-            const tx = await publishTallyRoot(
-                new PublicKey(adminKey),
-                multisigPda,
-                BigInt(proposalNonceInput),
-                tallyRootBytes,
-                proofUri
-            );
-            toast.success("Tally root published!", { description: `Tx: ${tx.slice(0, 16)}…` });
-            refetchElection();
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, msAuthority, adminKey, proposalNonceInput, tallyRootHex, proofUri, proposal, publishTallyRoot, refetchElection]);
-
-    return (
-        <div className="space-y-4">
-            {/* Shared multisig authority input */}
-            <div className="space-y-2">
-                <Label>Multisig Authority Key</Label>
-                <Input
-                    value={msAuthority}
-                    onChange={(e) => setMsAuthority(e.target.value)}
-                    placeholder="Multisig authority public key"
-                    className="font-mono text-xs"
-                />
-            </div>
-
-            <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                    <Label>Proposal Nonce</Label>
-                    {multisig && (
-                        <span className="text-xs text-muted-foreground">
-                            Next on-chain: {multisig.proposalNonce.toString()}
-                        </span>
-                    )}
-                </div>
-                <Input
-                    type="number"
-                    value={proposalNonceInput}
-                    onChange={(e) => setProposalNonceInput(e.target.value)}
-                />
-            </div>
-
-            {/* Live proposal status */}
-            <ProposalStatusCard
-                proposal={proposal}
-                proposalPda={proposalPda}
-                loading={proposalLoading}
-                error={proposalError}
-            />
-
-            <Separator />
-
-            {/* Create Proposal */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Create Governance Proposal</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label>Action Type</Label>
-                        <Select value={actionType} onValueChange={setActionType}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select action" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="0">Initialize Election</SelectItem>
-                                <SelectItem value="1">Transition Phase</SelectItem>
-                                <SelectItem value="2">Publish Tally Root</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {parseInt(actionType, 10) === GovernanceAction.TransitionPhase && (
-                        <div className="space-y-2">
-                            <Label>Target Phase (for action hash)</Label>
-                            <Select value={proposalPhase} onValueChange={setProposalPhase}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select target phase" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {[1, 2, 3, 4].map((p) => (
-                                        <SelectItem key={p} value={p.toString()}>
-                                            {PHASE_LABELS[p as ElectionPhase]}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">
-                                This must match the phase you transition to later.
-                            </p>
-                        </div>
-                    )}
-
-                    {parseInt(actionType, 10) === GovernanceAction.InitializeElection && (
-                        <>
-                            <div className="space-y-2">
-                                <Label>Election Title</Label>
-                                <Input
-                                    value={electionTitle}
-                                    onChange={(e) => setElectionTitle(e.target.value)}
-                                    placeholder="Election title"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Start Time</Label>
-                                    <Input
-                                        type="datetime-local"
-                                        value={electionStartTime}
-                                        onChange={(e) => setElectionStartTime(e.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>End Time</Label>
-                                    <Input
-                                        type="datetime-local"
-                                        value={electionEndTime}
-                                        onChange={(e) => setElectionEndTime(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    <div className="space-y-2">
-                        <Label>Expiry (hours)</Label>
-                        <Input
-                            type="number"
-                            value={expiryHours}
-                            onChange={(e) => setExpiryHours(e.target.value)}
-                        />
-                    </div>
-
-                    <Button onClick={handleCreateProposal} disabled={createLoading}>
-                        {createLoading ? "Creating…" : "Create Proposal"}
-                    </Button>
-                </CardContent>
-            </Card>
-
-            {/* Approve + Execute */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Approve & Execute</CardTitle>
-                    {proposal && (
-                        <CardDescription>
-                            {proposal.executed && proposal.consumed
-                                ? "This proposal has already been executed and consumed."
-                                : proposal.executed
-                                    ? "This proposal has been executed. Ready to be consumed."
-                                    : `${proposal.approvalCount} approval(s) recorded.`}
-                        </CardDescription>
-                    )}
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-3">
-                    <Button
-                        variant="secondary"
-                        onClick={handleApprove}
-                        disabled={approveLoading || proposal?.executed === true}
-                    >
-                        {approveLoading ? "Approving…" : "Approve Proposal"}
-                    </Button>
-                    <Button
-                        onClick={handleExecute}
-                        disabled={executeLoading || proposal?.executed === true}
-                    >
-                        {executeLoading ? "Executing…" : "Execute Proposal"}
-                    </Button>
-                </CardContent>
-            </Card>
-
-            {/* Publish Tally Root — only shown when relevant */}
-            {(actionType === "2" || (proposal && proposal.action === GovernanceAction.PublishTallyRoot)) && (
-                <>
-                    <Separator />
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Publish Tally Root</CardTitle>
-                            <CardDescription>
-                                Commit final tally root before transitioning to Finalized phase.
-                                Requires an executed PublishTallyRoot proposal.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Tally Root (hex, 64 chars)</Label>
-                                <Input
-                                    value={tallyRootHex}
-                                    onChange={(e) => setTallyRootHex(e.target.value)}
-                                    placeholder="0000000000000000000000000000000000000000000000000000000000000000"
-                                    className="font-mono text-xs"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Proof URI</Label>
-                                <Input
-                                    value={proofUri}
-                                    onChange={(e) => setProofUri(e.target.value)}
-                                    placeholder="ipfs://... or https://..."
-                                />
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Note: Uses the "Proposal Nonce" value from above ({proposalNonceInput})
-                            </p>
-                            <Button
-                                onClick={handlePublishTally}
-                                disabled={publishLoading}
-                            >
-                                {publishLoading ? "Publishing…" : "Publish Tally Root"}
-                            </Button>
-                        </CardContent>
-                    </Card>
-                </>
-            )}
-
-            {/* Phase Transition — only shown when relevant */}
-            {(actionType === "1" || (proposal && proposal.action === GovernanceAction.TransitionPhase)) && (
-                <>
-                    <Separator />
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center justify-between">
-                                <span>Phase Transition</span>
-                                {election && <PhaseBadge phase={election.phase} />}
-                            </CardTitle>
-                            <CardDescription>
-                                Advance the election lifecycle. Requires an executed TransitionPhase proposal.
-                                {election?.phase === ElectionPhase.RevealPhase && (
-                                    <span className="block mt-2 text-destructive">
-                                        ⚠️ Before transitioning to Finalized, you must publish the tally root (see above).
-                                    </span>
-                                )}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Target Phase</Label>
-                                <Select value={nextPhase} onValueChange={setNextPhase}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select next phase" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {[1, 2, 3, 4].map((p) => (
-                                            <SelectItem key={p} value={p.toString()}>
-                                                {PHASE_LABELS[p as ElectionPhase]}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Note: Uses the "Proposal Nonce" value from above ({proposalNonceInput})
-                            </p>
-                            <Button
-                                onClick={handleTransition}
-                                disabled={transitionLoading}
-                            >
-                                {transitionLoading ? "Transitioning…" : "Transition Phase"}
-                            </Button>
-                        </CardContent>
-                    </Card>
-                </>
-            )}
-        </div>
-    );
-}
-
-/* ── Candidate Registration ──────────────────────────────── */
-
-function CandidateSection({ adminKey }: { adminKey: string }) {
-    const { addCandidate, loading } = useAddCandidate();
-    const { election, refetch } = useElectionAccount(adminKey);
-    const { publicKey, connected } = useWallet();
-
-    const [name, setName] = useState("");
-    const [party, setParty] = useState("");
-
-    const handleAdd = useCallback(async () => {
-        if (!publicKey || !connected) {
-            toast.error("Wallet Not Connected", {
-                description: "Please connect your wallet first.",
-            });
-            return;
-        }
-        if (!election) {
-            toast.error("Election Not Found", {
-                description: "Please verify the admin key.",
-            });
-            return;
-        }
-        try {
-            const index = election.candidateCount;
-            const tx = await addCandidate(new PublicKey(adminKey), name, party, index);
-            toast.success(`Candidate #${index} added!`, { description: `Tx: ${tx.slice(0, 16)}…` });
-            setName("");
-            setParty("");
-            refetch();
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, connected, election, adminKey, name, party, addCandidate, refetch]);
-
-    const canAdd =
-        election?.phase === ElectionPhase.RegistrationPhase && connected;
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Add Candidate</CardTitle>
-                <CardDescription>
-                    Only during Registration phase, before start time.
-                    {election && (
-                        <span className="ml-2">
-                            Current count: <strong>{election.candidateCount}</strong>
-                        </span>
-                    )}
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {!connected && (
-                    <Alert>
-                        <AlertDescription>
-                            Please connect your wallet to add candidates.
-                        </AlertDescription>
-                    </Alert>
-                )}
-                {connected && !canAdd && election && (
-                    <Alert>
-                        <AlertDescription>
-                            Candidates can only be added during Registration phase. Current phase: {PHASE_LABELS[election.phase] || "Unknown"}
-                        </AlertDescription>
-                    </Alert>
-                )}
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label>Name</Label>
-                        <Input
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Candidate name"
-                            disabled={!canAdd || loading}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Party</Label>
-                        <Input
-                            value={party}
-                            onChange={(e) => setParty(e.target.value)}
-                            placeholder="Party name"
-                            disabled={!canAdd || loading}
-                        />
-                    </div>
-                </div>
-                <Button onClick={handleAdd} disabled={loading || !canAdd || !connected}>
-                    {loading ? "Adding…" : "Add Candidate"}
-                </Button>
-            </CardContent>
-        </Card>
-    );
-}
-
-/* ── Voter Registration ──────────────────────────────────── */
-
-function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVoterRegistered?: () => void }) {
-    const { registerVoter, loading } = useRegisterVoter();
-    const { election } = useElectionAccount(adminKey);
-    const { publicKey, connected } = useWallet();
-
-    const [voterKey, setVoterKey] = useState("");
-    const [showConfirmation, setShowConfirmation] = useState(false);
-    const [voterAuditLog, setVoterAuditLog] = useState<Array<{ address: string; action: string; timestamp: number; admin: string }>>();
-
-    const handleRegisterClick = useCallback(() => {
-        if (!publicKey || !connected) {
-            toast.error("Wallet Not Connected", {
-                description: "Please connect your wallet first.",
-            });
-            return;
-        }
-        if (!voterKey.trim()) {
-            toast.error("Empty Voter Address", {
-                description: "Please enter a valid voter public key.",
-            });
-            return;
-        }
-        setShowConfirmation(true);
-    }, [publicKey, connected, voterKey]);
-
-    const handleConfirmRegister = useCallback(async () => {
-        if (!publicKey || !connected) return;
-        try {
-            const tx = await registerVoter(
-                new PublicKey(adminKey),
-                new PublicKey(voterKey)
-            );
-            toast.success("Voter registered!", { description: `Tx: ${tx.slice(0, 16)}…` });
-
-            // Log to audit trail
-            const auditEntry = {
-                address: voterKey,
-                action: "registered",
-                timestamp: Math.floor(Date.now() / 1000),
-                admin: publicKey.toBase58(),
-            };
-            setVoterAuditLog(prev => [...(prev || []), auditEntry]);
-            localStorage.setItem(`audit_log_${adminKey}`, JSON.stringify([...(voterAuditLog || []), auditEntry]));
-
-            setVoterKey("");
-            setShowConfirmation(false);
-            if (onVoterRegistered) {
-                onVoterRegistered();
-            }
-        } catch (err) {
-            const { title, description } = parseError(err);
-            toast.error(title, { description });
-        }
-    }, [publicKey, connected, adminKey, voterKey, registerVoter, onVoterRegistered, voterAuditLog]);
-
-    const canRegister =
-        election?.phase === ElectionPhase.RegistrationPhase && connected;
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Register Voter</CardTitle>
-                <CardDescription>
-                    Whitelist a voter wallet. Only during Registration phase.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {!connected && (
-                    <Alert>
-                        <AlertDescription>
-                            Please connect your wallet to register voters.
-                        </AlertDescription>
-                    </Alert>
-                )}
-                {!election && (
-                    <Alert>
-                        <AlertDescription>
-                            Election not found. Please verify the admin key.
-                        </AlertDescription>
-                    </Alert>
-                )}
-                {connected && election && !election?.phase && (
-                    <Alert>
-                        <AlertDescription>
-                            Voters can only be registered during Registration phase.
-                        </AlertDescription>
-                    </Alert>
-                )}
-                {connected && election && election?.phase !== ElectionPhase.RegistrationPhase && (
-                    <Alert>
-                        <AlertDescription>
-                            Voters can only be registered during Registration phase. Current phase: {PHASE_LABELS[election.phase] || "Unknown"}
-                        </AlertDescription>
-                    </Alert>
-                )}
-                <div className="space-y-2">
-                    <Label>Voter Public Key</Label>
-                    <Input
-                        value={voterKey}
-                        onChange={(e) => setVoterKey(e.target.value)}
-                        placeholder="Voter wallet address"
-                        className="font-mono text-xs"
-                        disabled={!canRegister || loading}
-                    />
-                </div>
-                <Button onClick={handleRegisterClick} disabled={loading || !canRegister || !connected}>
-                    {loading ? "Registering…" : "Register Voter"}
-                </Button>
-
-                <VoterConfirmationDialog
-                    open={showConfirmation}
-                    voterAddress={voterKey}
-                    onConfirm={handleConfirmRegister}
-                    onCancel={() => setShowConfirmation(false)}
-                    isLoading={loading}
-                    type="register"
-                />
-            </CardContent>
-        </Card>
-    );
-}
-
-/* ── Voters Tab Wrapper ──────────────────────────────────── */
-
-function VotersTabContent({ adminKey }: { adminKey: string }) {
-    const [refetchTrigger, setRefetchTrigger] = useState(0);
-
-    const handleVoterRegistered = useCallback(() => {
-        setRefetchTrigger(prev => prev + 1);
-    }, []);
-
-    return (
-        <div className="space-y-4">
-            <VoterSection adminKey={adminKey} onVoterRegistered={handleVoterRegistered} />
-            {adminKey && (
-                <VoterManagementDashboard
-                    electionPda={getElectionPda(new PublicKey(adminKey))[0].toBase58()}
-                    refetchTrigger={refetchTrigger}
-                    adminKey={adminKey}
-                />
-            )}
-        </div>
-    );
+    return "Unknown";
 }
