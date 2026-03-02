@@ -27,43 +27,38 @@ export function useRegisteredVoters(electionPda: string | undefined, externalTri
             setError(null);
             try {
                 const program = getReadOnlyProgram();
+                const inputKey = new PublicKey(electionPda);
 
-                // electionPda could be either the admin key or the election PDA itself
-                // Try to derive the election PDA from the admin key
-                let electionKey: PublicKey;
-                try {
-                    const adminKey = new PublicKey(electionPda);
-                    const [derivedElectionPda] = getElectionPda(adminKey);
-                    electionKey = derivedElectionPda;
-                    console.log("Derived election PDA from admin key:", electionKey.toBase58());
-                } catch {
-                    // If derivation fails, treat electionPda as the election PDA directly
-                    electionKey = new PublicKey(electionPda);
-                    console.log("Using provided election PDA:", electionKey.toBase58());
-                }
-
-                // Fetch all whitelist entries for this election
+                // Fetch all whitelist entries once
                 const allWhitelistAccounts = await program.account.whitelistEntry.all();
-                console.log("Total whitelist entries in program:", allWhitelistAccounts.length);
 
-                // Filter manually to match the election
-                const whitelistAccounts = allWhitelistAccounts.filter((wl: any) => {
+                // Try to find matching voters using the input key directly
+                let whitelistAccounts = allWhitelistAccounts.filter((wl: any) => {
                     const whitelistData = wl.account as WhitelistEntryAccount;
-                    return whitelistData.election.toBase58() === electionKey.toBase58();
+                    return whitelistData.election.toBase58() === inputKey.toBase58();
                 });
 
-                console.log("Whitelist entries for this election:", whitelistAccounts.length);
+                // If no matches, try deriving from input as admin key
+                if (whitelistAccounts.length === 0) {
+                    const [derivedPda] = getElectionPda(inputKey);
+
+                    whitelistAccounts = allWhitelistAccounts.filter((wl: any) => {
+                        const whitelistData = wl.account as WhitelistEntryAccount;
+                        return whitelistData.election.toBase58() === derivedPda.toBase58();
+                    });
+                }
+
+                // Determine which key we're using
+                const electionKey = whitelistAccounts.length > 0
+                    ? new PublicKey(whitelistAccounts[0].account.election)
+                    : inputKey;
 
                 // Fetch all voter records for this election
                 const allVoterRecordAccounts = await program.account.voterRecord.all();
-                console.log("Total voter records in program:", allVoterRecordAccounts.length);
-
                 const voterRecordAccounts = allVoterRecordAccounts.filter((vr: any) => {
                     const voterRecordData = vr.account as VoterRecordAccount;
                     return voterRecordData.election.toBase58() === electionKey.toBase58();
                 });
-
-                console.log("Voter records for this election:", voterRecordAccounts.length);
 
                 const voterRecordByVoter = new Map<string, VoterRecordAccount>();
                 for (const vr of voterRecordAccounts) {
@@ -71,25 +66,22 @@ export function useRegisteredVoters(electionPda: string | undefined, externalTri
                     voterRecordByVoter.set(record.voter.toBase58(), record);
                 }
 
-                // For each whitelist entry, try to fetch their voter record
-                const votersData = await Promise.all(
-                    whitelistAccounts.map(async (wl: any) => {
-                        const whitelistData = wl.account as WhitelistEntryAccount;
-                        const voterAddress = whitelistData.voter.toBase58();
-                        const voterRecord = voterRecordByVoter.get(voterAddress) ?? null;
+                // For each whitelist entry, build the voter data
+                const votersData = whitelistAccounts.map((wl: any) => {
+                    const whitelistData = wl.account as WhitelistEntryAccount;
+                    const voterAddress = whitelistData.voter.toBase58();
+                    const voterRecord = voterRecordByVoter.get(voterAddress) ?? null;
 
-                        return {
-                            voterAddress,
-                            isActive: whitelistData.isActive,
-                            hasCommitted: voterRecord?.hasCommitted || false,
-                            hasRevealed: voterRecord?.hasRevealed || false,
-                            committedAt: voterRecord?.committedAt,
-                            revealedAt: voterRecord?.revealedAt,
-                        };
-                    })
-                );
+                    return {
+                        voterAddress,
+                        isActive: whitelistData.isActive,
+                        hasCommitted: voterRecord?.hasCommitted || false,
+                        hasRevealed: voterRecord?.hasRevealed || false,
+                        committedAt: voterRecord?.committedAt,
+                        revealedAt: voterRecord?.revealedAt,
+                    };
+                });
 
-                console.log("Final voters data:", votersData);
                 setVoters(votersData);
             } catch (err) {
                 console.error("Error fetching registered voters:", err);

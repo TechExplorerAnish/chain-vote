@@ -9,6 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  Lock,
+  Settings,
+  Database,
+  CheckCircle2,
+  ArrowRight,
+  Search,
+  Zap
+} from "lucide-react";
 
 export default function Home() {
   const router = useRouter();
@@ -52,7 +61,7 @@ export default function Home() {
         {/* Hero */}
         <section className="space-y-4 pt-8 text-center">
           <Badge variant="secondary">Solana · Anchor · Commit-Reveal</Badge>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          <h1 className="text-3xl font-bold w-full text-center tracking-tight sm:text-4xl">
             Chain Vote Governance Protocol
           </h1>
           <p className="mx-auto max-w-2xl text-muted-foreground">
@@ -75,7 +84,10 @@ export default function Home() {
         <section>
           <Card>
             <CardHeader>
-              <CardTitle>View Election</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                View Election
+              </CardTitle>
               <CardDescription>
                 Enter the admin public key that initialized the election to view its
                 live status, candidates, and results.
@@ -93,7 +105,8 @@ export default function Home() {
                   onKeyDown={(e) => e.key === "Enter" && handleLookup()}
                 />
               </div>
-              <Button onClick={handleLookup} disabled={!adminKey.trim()}>
+              <Button onClick={handleLookup} disabled={!adminKey.trim()} className="w-full">
+                <Search className="mr-2 h-4 w-4" />
                 View Election
               </Button>
             </CardContent>
@@ -104,7 +117,10 @@ export default function Home() {
         <section className="grid gap-4 sm:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Commit-Reveal Voting</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Lock className="h-4 w-4" />
+                Commit-Reveal Voting
+              </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               Votes are committed as SHA-256 hashes with nonce and salt. Revealed
@@ -113,7 +129,10 @@ export default function Home() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Multisig Governance</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Settings className="h-4 w-4" />
+                Multisig Governance
+              </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               Admin actions require governance proposals with threshold-based
@@ -122,7 +141,10 @@ export default function Home() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Deterministic PDAs</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Database className="h-4 w-4" />
+                Deterministic PDAs
+              </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               Election, candidate, voter, and whitelist accounts are derived from
@@ -131,7 +153,10 @@ export default function Home() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">On-Chain Audit Trail</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CheckCircle2 className="h-4 w-4" />
+                On-Chain Audit Trail
+              </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               Every action emits Anchor events. Final tally root and proof URI
@@ -143,24 +168,30 @@ export default function Home() {
         {/* Lifecycle */}
         <Card>
           <CardHeader>
-            <CardTitle>Election Lifecycle</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Election Lifecycle
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               {[
-                "Created",
-                "Registration",
-                "Voting",
-                "Reveal",
-                "Finalized",
-              ].map((phase, i) => (
-                <span key={phase} className="flex items-center gap-2">
-                  <Badge variant={i === 0 ? "default" : "outline"}>{phase}</Badge>
-                  {i < 4 && <span className="text-muted-foreground">→</span>}
+                { phase: "Created", icon: "📋" },
+                { phase: "Registration", icon: "📝" },
+                { phase: "Voting", icon: "🗳️" },
+                { phase: "Reveal", icon: "🔍" },
+                { phase: "Finalized", icon: "✅" },
+              ].map((item, i) => (
+                <span key={item.phase} className="flex items-center gap-2">
+                  <Badge variant={i === 0 ? "default" : "outline"} className="flex items-center gap-1">
+                    <span>{item.icon}</span>
+                    {item.phase}
+                  </Badge>
+                  {i < 4 && <ArrowRight className="h-4 w-4 text-muted-foreground" />}
                 </span>
               ))}
             </div>
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="mt-4 text-sm text-muted-foreground">
               Forward-only phase transitions enforced on-chain. Each transition
               requires an executed governance proposal. Finalization requires
               tally root commitment and complete vote reveals.

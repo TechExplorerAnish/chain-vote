@@ -13,6 +13,8 @@ import { useAddCandidate } from "@/hooks/use-admin";
 import { useElectionAccount } from "@/hooks/use-election-account";
 import { ElectionPhase, PHASE_LABELS } from "@/lib/types";
 import { parseError } from "@/lib/utils";
+import { UserPlus, AlertCircle, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export function CandidateSection({ adminKey }: { adminKey: string }) {
     const { addCandidate, loading } = useAddCandidate();
@@ -59,7 +61,17 @@ export function CandidateSection({ adminKey }: { adminKey: string }) {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Add Candidate</CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                        <UserPlus className="h-5 w-5" />
+                        <CardTitle>Add Candidate</CardTitle>
+                    </div>
+                    {election && (
+                        <Badge variant="secondary" className="bg-blue-600 hover:bg-blue-700">
+                            {election.candidateCount} Total
+                        </Badge>
+                    )}
+                </div>
                 <CardDescription>
                     Only during Registration phase, before start time.
                     {election && (
@@ -72,6 +84,7 @@ export function CandidateSection({ adminKey }: { adminKey: string }) {
             <CardContent className="space-y-4">
                 {!connected && (
                     <Alert>
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                             Please connect your wallet to add candidates.
                         </AlertDescription>
@@ -79,6 +92,7 @@ export function CandidateSection({ adminKey }: { adminKey: string }) {
                 )}
                 {connected && election && election.phase !== ElectionPhase.RegistrationPhase && (
                     <Alert>
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                             Candidates can only be added during Registration phase. Current phase: {PHASE_LABELS[election.phase] || "Unknown"}
                         </AlertDescription>
@@ -86,6 +100,7 @@ export function CandidateSection({ adminKey }: { adminKey: string }) {
                 )}
                 {connected && election && !isElectionAdmin && (
                     <Alert>
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                             Only the election admin ({election.admin.toBase58()}) can add candidates in the current on-chain design.
                         </AlertDescription>
@@ -111,7 +126,8 @@ export function CandidateSection({ adminKey }: { adminKey: string }) {
                         />
                     </div>
                 </div>
-                <Button onClick={handleAdd} disabled={loading || !canAdd || !connected}>
+                <Button onClick={handleAdd} disabled={loading || !canAdd || !connected} className="w-full">
+                    <UserPlus className="mr-2 h-4 w-4" />
                     {loading ? "Adding…" : "Add Candidate"}
                 </Button>
             </CardContent>

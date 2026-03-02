@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMultisigRegistry } from "@/hooks/use-multisig-registry";
 import { getMultisigPda, getProposalPda } from "@/lib/pda";
 import { getReadOnlyProgram } from "@/lib/program";
+import { ShieldCheck, Bell, Vote, Scale, UserPlus, Users, Settings } from "lucide-react";
 
 import { MultisigSection } from "@/components/admin/multisig-section";
 import { ElectionSection } from "@/components/admin/election-section";
@@ -224,8 +225,11 @@ export default function AdminPage() {
 
     return (
         <div className="mx-auto max-w-4xl space-y-6 p-6">
-            <div>
-                <h1 className="text-2xl font-bold">Admin Panel</h1>
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <Settings className="h-6 w-6" />
+                    <h1 className="text-2xl font-bold">Admin Panel</h1>
+                </div>
                 <p className="text-sm text-muted-foreground">
                     Governance controls for the Chain Vote protocol
                 </p>
@@ -247,12 +251,30 @@ export default function AdminPage() {
 
             <Tabs defaultValue="multisig">
                 <TabsList className="flex-wrap">
-                    <TabsTrigger value="multisig">Multisig</TabsTrigger>
-                    <TabsTrigger value="notifications">Notifications</TabsTrigger>
-                    <TabsTrigger value="election">Election</TabsTrigger>
-                    <TabsTrigger value="governance">Governance</TabsTrigger>
-                    <TabsTrigger value="candidates">Candidates</TabsTrigger>
-                    <TabsTrigger value="voters">Voters</TabsTrigger>
+                    <TabsTrigger value="multisig">
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        Multisig
+                    </TabsTrigger>
+                    <TabsTrigger value="notifications">
+                        <Bell className="mr-2 h-4 w-4" />
+                        Notifications
+                    </TabsTrigger>
+                    <TabsTrigger value="election">
+                        <Vote className="mr-2 h-4 w-4" />
+                        Election
+                    </TabsTrigger>
+                    <TabsTrigger value="governance">
+                        <Scale className="mr-2 h-4 w-4" />
+                        Governance
+                    </TabsTrigger>
+                    <TabsTrigger value="candidates">
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Candidates
+                    </TabsTrigger>
+                    <TabsTrigger value="voters">
+                        <Users className="mr-2 h-4 w-4" />
+                        Voters
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="multisig" className="mt-4">

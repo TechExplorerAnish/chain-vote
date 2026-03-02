@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Scale, FileText, Vote as VoteIcon, CheckCircle2, Send, AlertCircle } from "lucide-react";
 import {
     Select,
     SelectContent,
@@ -479,7 +481,7 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
     }, [publicKey, msAuthority, adminKey, proposalNonceInput, tallyRootHex, proofUri, proposal, publishTallyRoot, refetchElection]);
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             <div className="space-y-2">
                 <Label>Multisig Authority Key</Label>
                 <Input
@@ -495,6 +497,7 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
 
             {multisig && multisig.threshold < multisig.adminCount && (
                 <Alert>
+                    <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
                         Current multisig threshold is {multisig.threshold}/{multisig.adminCount}. Proposal execution does not require all admins.
                     </AlertDescription>
@@ -529,7 +532,10 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Create Governance Proposal</CardTitle>
+                    <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        <CardTitle>Create Governance Proposal</CardTitle>
+                    </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
@@ -608,6 +614,7 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
                     </div>
 
                     <Button onClick={handleCreateProposal} disabled={createLoading}>
+                        <Send className="mr-2 h-4 w-4" />
                         {createLoading ? "Creating…" : "Create Proposal"}
                     </Button>
                 </CardContent>
@@ -615,7 +622,10 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Approve & Execute</CardTitle>
+                    <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5" />
+                        <CardTitle>Approve & Execute</CardTitle>
+                    </div>
                     {multisig && (
                         <div className="text-xs text-muted-foreground mt-1">
                             Multisig: {multisig.adminCount} admins, threshold {multisig.threshold}
@@ -636,20 +646,53 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
                         </CardDescription>
                     )}
                 </CardHeader>
-                <CardContent className="flex flex-wrap gap-3">
-                    <Button
-                        variant="secondary"
-                        onClick={handleApprove}
-                        disabled={approveLoading || proposal?.executed === true}
-                    >
-                        {approveLoading ? "Approving…" : "Approve Proposal"}
-                    </Button>
-                    <Button
-                        onClick={handleExecute}
-                        disabled={executeLoading || proposal?.executed === true || Boolean(multisig && proposal && proposal.approvalCount < multisig.threshold)}
-                    >
-                        {executeLoading ? "Executing…" : "Execute Proposal"}
-                    </Button>
+                <CardContent className="space-y-4">
+                    {proposal && multisig && (
+                        <div className="rounded-lg border border-cyan-200 bg-cyan-50/50 dark:border-cyan-900 dark:bg-cyan-950/20 p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                    <Badge className="bg-cyan-600 hover:bg-cyan-700">
+                                        Proposal #{proposal.nonce?.toString() || "0"}
+                                    </Badge>
+                                    <Badge variant="outline" className="border-cyan-300 text-cyan-700 dark:border-cyan-700 dark:text-cyan-400">
+                                        {proposal.executed && proposal.consumed ? "✓ Consumed" : proposal.executed ? "✓ Executed" : "⏳ Active"}
+                                    </Badge>
+                                </div>
+                                <Badge variant="secondary" className="text-xs">
+                                    {proposal.approvalCount}/{multisig.threshold} ✓
+                                </Badge>
+                            </div>
+                            <CardDescription className="text-xs">
+                                {proposal.executed && proposal.consumed
+                                    ? "This proposal has already been executed and consumed."
+                                    : proposal.executed
+                                        ? "This proposal has been executed. Ready to be consumed."
+                                        : (() => {
+                                            const remaining = multisig.threshold - proposal.approvalCount;
+                                            return remaining > 0
+                                                ? `${proposal.approvalCount}/${multisig.threshold} approvals. Need ${remaining} more to execute.`
+                                                : `✓ Threshold reached (${proposal.approvalCount}/${multisig.threshold}). Ready to execute!`;
+                                        })()}
+                            </CardDescription>
+                        </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant="secondary"
+                            onClick={handleApprove}
+                            disabled={approveLoading || proposal?.executed === true}
+                        >
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            {approveLoading ? "Approving…" : "Approve Proposal"}
+                        </Button>
+                        <Button
+                            onClick={handleExecute}
+                            disabled={executeLoading || proposal?.executed === true || Boolean(multisig && proposal && proposal.approvalCount < multisig.threshold)}
+                        >
+                            <VoteIcon className="mr-2 h-4 w-4" />
+                            {executeLoading ? "Executing…" : "Execute Proposal"}
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -720,6 +763,7 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
                             </div>
                             {proofUploadError && (
                                 <Alert variant="destructive">
+                                    <AlertCircle className="h-4 w-4" />
                                     <AlertDescription>{proofUploadError}</AlertDescription>
                                 </Alert>
                             )}

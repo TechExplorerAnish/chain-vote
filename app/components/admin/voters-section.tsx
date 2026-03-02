@@ -16,6 +16,7 @@ import { useElectionAccount } from "@/hooks/use-election-account";
 import { ElectionPhase, PHASE_LABELS } from "@/lib/types";
 import { getElectionPda } from "@/lib/pda";
 import { parseError } from "@/lib/utils";
+import { UserPlus, Users, AlertCircle } from "lucide-react";
 
 function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVoterRegistered?: () => void }) {
     const { registerVoter, loading } = useRegisterVoter();
@@ -83,7 +84,10 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Register Voter</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                    <UserPlus className="h-5 w-5" />
+                    Register Voter
+                </CardTitle>
                 <CardDescription>
                     Whitelist a voter wallet. Only during Registration phase.
                 </CardDescription>
@@ -91,6 +95,7 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
             <CardContent className="space-y-4">
                 {!connected && (
                     <Alert>
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                             Please connect your wallet to register voters.
                         </AlertDescription>
@@ -98,6 +103,7 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
                 )}
                 {!election && (
                     <Alert>
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                             Election not found. Please verify the admin key.
                         </AlertDescription>
@@ -105,6 +111,7 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
                 )}
                 {connected && election && !election?.phase && (
                     <Alert>
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                             Voters can only be registered during Registration phase.
                         </AlertDescription>
@@ -112,10 +119,10 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
                 )}
                 {connected && election && election?.phase !== ElectionPhase.RegistrationPhase && (
                     <Alert>
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                             Voters can only be registered during Registration phase.
-                            <p>
-
+                            <p className="mt-2 text-xs">
                                 Current phase: {PHASE_LABELS[election.phase] || "Unknown"}
                             </p>
                         </AlertDescription>
@@ -123,14 +130,16 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
                 )}
                 {connected && election && !isElectionAdmin && (
                     <Alert>
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
-                            Only the election admin ({election.admin.toBase58()}) can register voters in the current on-chain design.
+                            Only the election admin ({election.admin.toBase58().slice(0, 8)}…) can register voters.
                         </AlertDescription>
                     </Alert>
                 )}
                 <div className="space-y-2">
-                    <Label>Voter Public Key</Label>
+                    <Label htmlFor="voter-key">Voter Public Key</Label>
                     <Input
+                        id="voter-key"
                         value={voterKey}
                         onChange={(e) => setVoterKey(e.target.value)}
                         placeholder="Voter wallet address"
@@ -138,7 +147,8 @@ function VoterSection({ adminKey, onVoterRegistered }: { adminKey: string; onVot
                         disabled={!canRegister || loading}
                     />
                 </div>
-                <Button onClick={handleRegisterClick} disabled={loading || !canRegister || !connected}>
+                <Button onClick={handleRegisterClick} disabled={loading || !canRegister || !connected} className="w-full">
+                    <UserPlus className="mr-2 h-4 w-4" />
                     {loading ? "Registering…" : "Register Voter"}
                 </Button>
 
@@ -163,7 +173,7 @@ export function VotersSection({ adminKey }: { adminKey: string }) {
     }, []);
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             <VoterSection adminKey={adminKey} onVoterRegistered={handleVoterRegistered} />
             {adminKey && (
                 <VoterManagementDashboard

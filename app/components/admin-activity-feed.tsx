@@ -137,7 +137,7 @@ export function AdminActivityFeed({
                         <p className="text-sm mt-1">You&apos;re all caught up!</p>
                     </div>
                 ) : (
-                    <div className="h-[400px] overflow-y-auto pr-4">
+                    <div className="h-400px overflow-y-auto pr-4">
                         <div className="space-y-4">
                             {pendingProposals.map((proposal, index) => (
                                 <div key={proposal.publicKey.toString()}>

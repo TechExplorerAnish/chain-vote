@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { useInitializeElection, useMultisigAccount, useProposalAccount } from "@/hooks/use-admin";
 import { useElectionAccount } from "@/hooks/use-election-account";
 import PhaseBadge from "@/components/phase-badge";
@@ -15,6 +16,7 @@ import PhaseTiming from "@/components/phase-timing";
 import { GovernanceAction } from "@/lib/types";
 import { getMultisigPda } from "@/lib/pda";
 import { parseError } from "@/lib/utils";
+import { Vote, Calendar, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 
 function toLocalDateTimeInput(unixSeconds: bigint): string {
     const d = new Date(Number(unixSeconds) * 1000);
@@ -153,21 +155,29 @@ export function ElectionSection({ adminKey }: { adminKey: string }) {
                                 <span className="text-muted-foreground">Title</span>
                                 <span>{election.title}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                                 <span className="text-muted-foreground">Candidates</span>
-                                <span>{election.candidateCount}</span>
+                                <Badge variant="secondary" className="bg-blue-600 hover:bg-blue-700">
+                                    {election.candidateCount}
+                                </Badge>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                                 <span className="text-muted-foreground">Committed</span>
-                                <span>{election.totalCommittedVotes.toString()}</span>
+                                <Badge variant="outline" className="border-orange-300 text-orange-700 dark:border-orange-700 dark:text-orange-400">
+                                    {election.totalCommittedVotes.toString()}
+                                </Badge>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                                 <span className="text-muted-foreground">Revealed</span>
-                                <span>{election.totalRevealedVotes.toString()}</span>
+                                <Badge variant="outline" className="border-green-300 text-green-700 dark:border-green-700 dark:text-green-400">
+                                    {election.totalRevealedVotes.toString()}
+                                </Badge>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                                 <span className="text-muted-foreground">Tally Root</span>
-                                <span>{election.finalTallyRootSet ? "Set" : "Pending"}</span>
+                                <Badge className={election.finalTallyRootSet ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}>
+                                    {election.finalTallyRootSet ? "✓ Set" : "⏳ Pending"}
+                                </Badge>
                             </div>
                         </CardContent>
                     </Card>
@@ -240,7 +250,8 @@ export function ElectionSection({ adminKey }: { adminKey: string }) {
                                 />
                             </div>
                         </div>
-                        <Button onClick={handleInit} disabled={loading}>
+                        <Button onClick={handleInit} disabled={loading} className="w-full">
+                            <Vote className="mr-2 h-4 w-4" />
                             {loading ? "Initializing…" : "Initialize Election"}
                         </Button>
                     </CardContent>
