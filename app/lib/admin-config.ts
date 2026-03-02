@@ -6,8 +6,10 @@ import { PublicKey } from "@solana/web3.js";
  * Example: "HN7cABqLq46Es1jh92dQQisAq662SmxELPhJ1tKT1g3"
  */
 export const AUTHORIZED_ADMINS: string[] = [
-    // Add authorized admin public keys here
-    // Format: "base58PublicKeyString"
+    // Localnet test wallets (from voterid.txt)
+    "2RbWqgxZKVrC6ra3T15bFB8QyVNiAtFrJHAVFMbjqBMF",
+    "9FtRdVmh4tTxDtnwAYnc1RDs8Mx9qi5tbFcqU3WJJZ5n",
+    "9gspNNLFLQyWHhBpRunF2A6huVFWhdhf614mHYrDAQWv",
 ];
 
 /**

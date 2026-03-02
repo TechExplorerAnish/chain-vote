@@ -25,6 +25,8 @@ import VoterManagementDashboard from "@/components/voter-management-dashboard";
 import { VoterConfirmationDialog } from "@/components/voter-confirmation-dialog";
 import { useElectionAccount } from "@/hooks/use-election-account";
 import { useRegisteredVoters } from "@/hooks/use-registered-voters";
+import { useUploadProof } from "@/hooks/use-upload-proof";
+import { useMultisigRegistry } from "@/hooks/use-multisig-registry";
 import {
     useInitializeMultisig,
     useCreateProposal,
@@ -44,7 +46,7 @@ import {
 import type { ProposalAccountData } from "@/hooks/use-admin";
 import { GovernanceAction, ElectionPhase, PHASE_LABELS } from "@/lib/types";
 import { getMultisigPda, getElectionPda, getProposalPda } from "@/lib/pda";
-import { getConnection } from "@/lib/program";
+import { getConnection, getReadOnlyProgram } from "@/lib/program";
 import { parseError } from "@/lib/utils";
 
 function toLocalDateTimeInput(unixSeconds: bigint): string {
@@ -81,10 +83,97 @@ async function getChainNowSec(): Promise<bigint> {
 export default function AdminPage() {
     const { connected, publicKey } = useWallet();
     const [adminKeyInput, setAdminKeyInput] = useState("");
+    const { findMultisigsByAdmin } = useMultisigRegistry();
+    const [prefetchedNotifications, setPrefetchedNotifications] = useState<PendingApprovalItem[]>([]);
+    const [notificationsLoading, setNotificationsLoading] = useState(false);
 
     useEffect(() => {
         if (publicKey) setAdminKeyInput(publicKey.toBase58());
     }, [publicKey]);
+
+    // Prefetch notifications in background
+    const prefetchNotifications = useCallback(async () => {
+        if (!publicKey) {
+            setPrefetchedNotifications([]);
+            return;
+        }
+
+        setNotificationsLoading(true);
+        try {
+            const adminWallet = publicKey.toBase58();
+            const multisigs = await findMultisigsByAdmin(adminWallet);
+            const program = getReadOnlyProgram();
+            const pending: PendingApprovalItem[] = [];
+
+            for (const ms of multisigs) {
+                let multisigPda: PublicKey;
+                try {
+                    multisigPda = ms.multisigPda
+                        ? new PublicKey(ms.multisigPda)
+                        : getMultisigPda(new PublicKey(ms.authority))[0];
+                } catch {
+                    continue;
+                }
+
+                let multisigAccount: any;
+                try {
+                    multisigAccount = await program.account.adminMultisig.fetch(multisigPda);
+                } catch {
+                    continue;
+                }
+
+                const adminCount = multisigAccount.adminCount as number;
+                const threshold = multisigAccount.threshold as number;
+                const admins = (multisigAccount.admins as PublicKey[]).slice(0, adminCount);
+                const adminIndex = admins.findIndex((a) => a.toBase58() === adminWallet);
+                if (adminIndex < 0) continue;
+
+                const proposalNonce = Number(
+                    BigInt((multisigAccount.proposalNonce as { toString(): string }).toString())
+                );
+
+                for (let nonce = 0; nonce < proposalNonce; nonce++) {
+                    const [proposalPda] = getProposalPda(multisigPda, BigInt(nonce));
+                    try {
+                        const proposal = await program.account.governanceProposal.fetch(proposalPda);
+                        const approvals = (proposal.approvals as boolean[]).slice(0, adminCount);
+                        const alreadyApproved = Boolean(approvals[adminIndex]);
+                        const executed = Boolean(proposal.executed);
+                        const consumed = Boolean(proposal.consumed);
+
+                        if (alreadyApproved || executed || consumed) continue;
+
+                        pending.push({
+                            multisigAuthority: ms.authority,
+                            multisigPda,
+                            threshold,
+                            adminCount,
+                            proposalPda,
+                            nonce: BigInt((proposal.nonce as { toString(): string }).toString()),
+                            proposer: proposal.proposer as PublicKey,
+                            actionLabel: parseActionLabel(proposal.action),
+                            approvalCount: proposal.approvalCount as number,
+                            createdAt: BigInt((proposal.createdAt as { toString(): string }).toString()),
+                            expiresAt: BigInt((proposal.expiresAt as { toString(): string }).toString()),
+                        });
+                    } catch {
+                        // Nonce may be unused; skip.
+                    }
+                }
+            }
+
+            pending.sort((a, b) => Number(b.createdAt - a.createdAt));
+            setPrefetchedNotifications(pending);
+        } catch (err) {
+            setPrefetchedNotifications([]);
+        } finally {
+            setNotificationsLoading(false);
+        }
+    }, [publicKey, findMultisigsByAdmin]);
+
+    useEffect(() => {
+        prefetchNotifications();
+    }, [prefetchNotifications]);
 
     if (!connected || !publicKey) {
         return (
@@ -119,6 +208,7 @@ export default function AdminPage() {
             <Tabs defaultValue="multisig">
                 <TabsList className="flex-wrap">
                     <TabsTrigger value="multisig">Multisig</TabsTrigger>
+                    <TabsTrigger value="notifications">Notifications</TabsTrigger>
                     <TabsTrigger value="election">Election</TabsTrigger>
                     <TabsTrigger value="governance">Governance</TabsTrigger>
                     <TabsTrigger value="candidates">Candidates</TabsTrigger>
@@ -127,6 +217,14 @@ export default function AdminPage() {
 
                 <TabsContent value="multisig" className="mt-4">
                     <MultisigSection />
+                </TabsContent>
+
+                <TabsContent value="notifications" className="mt-4">
+                    <NotificationsSection
+                        prefetchedItems={prefetchedNotifications}
+                        prefetchLoading={notificationsLoading}
+                        onRefresh={prefetchNotifications}
+                    />
                 </TabsContent>
 
                 <TabsContent value="election" className="mt-4">
@@ -154,12 +252,31 @@ export default function AdminPage() {
 function MultisigSection() {
     const { publicKey } = useWallet();
     const { initialize, loading } = useInitializeMultisig();
+    const { registerMultisig, loading: registering } = useMultisigRegistry();
+    const { multisig: existingMultisig, fetchMultisig: fetchExistingMultisig } = useMultisigAccount(publicKey?.toBase58());
     const [adminsInput, setAdminsInput] = useState("");
     const [threshold, setThreshold] = useState("1");
     const MAX_ADMINS = 5;
 
+    // Compute and display the multisig PDA that will be created
+    const multisigPda = publicKey ? getMultisigPda(publicKey)[0].toBase58() : "";
+
+    useEffect(() => {
+        if (publicKey) {
+            fetchExistingMultisig();
+        }
+    }, [publicKey, fetchExistingMultisig]);
+
     const handleInit = useCallback(async () => {
         if (!publicKey) return;
+
+        if (existingMultisig) {
+            toast.error("Multisig already initialized for this authority", {
+                description: `Current threshold is ${existingMultisig.threshold}/${existingMultisig.adminCount}.`,
+            });
+            return;
+        }
+
         const rawAdmins = adminsInput
             .split(",")
             .map((s) => s.trim())
@@ -208,11 +325,30 @@ function MultisigSection() {
         try {
             const tx = await initialize(adminKeys, thresholdValue);
             toast.success("Multisig initialized!", { description: `Tx: ${tx.slice(0, 16)}…` });
+
+            // Auto-register multisig metadata in Pinata for discovery
+            try {
+                const adminStrings = adminKeys.map(k => k.toBase58());
+                await registerMultisig(
+                    publicKey.toBase58(),
+                    multisigPda,
+                    adminStrings,
+                    thresholdValue
+                );
+                toast.success("Multisig registered! All admins can now auto-discover it.", {
+                    duration: 5000,
+                });
+            } catch (regErr) {
+                console.error("Failed to register multisig:", regErr);
+                toast.warning("Multisig created but registration failed", {
+                    description: "Admins will need to manually enter the authority key.",
+                });
+            }
         } catch (err) {
             const { title, description } = parseError(err);
             toast.error(title, { description });
         }
-    }, [publicKey, adminsInput, threshold, initialize]);
+    }, [publicKey, existingMultisig, adminsInput, threshold, initialize, multisigPda, registerMultisig]);
 
     return (
         <Card>
@@ -222,7 +358,31 @@ function MultisigSection() {
                     Set up the admin multisig. PDA seed: [&quot;multisig&quot;, payer].
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 overflow-hidden">
+                {publicKey && (
+                    <Alert>
+                        <AlertDescription className="space-y-1 text-xs">
+                            <div>
+                                <strong>Multisig Authority:</strong>
+                                <div className="font-mono break-all">{publicKey.toBase58()}</div>
+                            </div>
+                            <div>
+                                <strong>Multisig PDA:</strong>
+                                <div className="font-mono break-all">{multisigPda}</div>
+                            </div>
+                            <span className="text-muted-foreground">
+                                🤖 Metadata will be auto-registered in Pinata for all admins to discover
+                            </span>
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {existingMultisig && (
+                    <Alert>
+                        <AlertDescription className="text-xs">
+                            Existing on-chain multisig detected: {existingMultisig.adminCount} admins, threshold {existingMultisig.threshold}.
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <div className="space-y-2">
                     <Label>Admin Public Keys (comma-separated)</Label>
                     <Input
@@ -241,9 +401,12 @@ function MultisigSection() {
                         value={threshold}
                         onChange={(e) => setThreshold(e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                        Required approvals to execute. Set this equal to admin count if you want unanimous approval.
+                    </p>
                 </div>
-                <Button onClick={handleInit} disabled={loading}>
-                    {loading ? "Initializing…" : "Initialize Multisig"}
+                <Button onClick={handleInit} disabled={loading || registering}>
+                    {loading ? "Initializing…" : registering ? "Registering…" : "Initialize Multisig"}
                 </Button>
             </CardContent>
         </Card>
@@ -476,11 +639,13 @@ function ProposalStatusCard({
     proposalPda,
     loading,
     error,
+    multisig,
 }: {
     proposal: ProposalAccountData | null;
     proposalPda: PublicKey | null;
     loading: boolean;
     error: string | null;
+    multisig?: { threshold: number; adminCount: number } | null;
 }) {
     if (loading) {
         return (
@@ -543,7 +708,16 @@ function ProposalStatusCard({
                 <div className="flex justify-between">
                     <span className="text-muted-foreground">Approvals</span>
                     <div className="flex items-center gap-2">
-                        <span className="font-medium">{approvedCount}</span>
+                        {multisig ? (
+                            <span className="font-medium">
+                                {approvedCount}/{multisig.threshold}
+                                <span className="ml-1 text-xs text-muted-foreground">
+                                    (threshold: {multisig.threshold}/{multisig.adminCount})
+                                </span>
+                            </span>
+                        ) : (
+                            <span className="font-medium">{approvedCount}</span>
+                        )}
                         <div className="flex gap-1">
                             {proposal.approvals.map((approved, i) => (
                                 <div
@@ -595,6 +769,194 @@ function ProposalStatusCard({
     );
 }
 
+interface PendingApprovalItem {
+    multisigAuthority: string;
+    multisigPda: PublicKey;
+    threshold: number;
+    adminCount: number;
+    proposalPda: PublicKey;
+    nonce: bigint;
+    proposer: PublicKey;
+    actionLabel: string;
+    approvalCount: number;
+    createdAt: bigint;
+    expiresAt: bigint;
+}
+
+function parseActionLabel(actionObj: unknown): string {
+    if (typeof actionObj === "number") {
+        return ACTION_LABELS[actionObj as GovernanceAction] ?? "Unknown";
+    }
+    if (actionObj && typeof actionObj === "object") {
+        if ("initializeElection" in actionObj) return "Initialize Election";
+        if ("transitionPhase" in actionObj) return "Transition Phase";
+        if ("publishTallyRoot" in actionObj) return "Publish Tally Root";
+    }
+    return "Unknown";
+}
+
+function ExpiryCountdown({ expiresAt }: { expiresAt: bigint }) {
+    const [timeLeft, setTimeLeft] = useState("");
+
+    useEffect(() => {
+        const updateCountdown = () => {
+            const now = Math.floor(Date.now() / 1000);
+            const expiry = Number(expiresAt);
+            const diff = expiry - now;
+
+            if (diff <= 0) {
+                setTimeLeft("Expired");
+                return;
+            }
+
+            const days = Math.floor(diff / 86400);
+            const hours = Math.floor((diff % 86400) / 3600);
+            const minutes = Math.floor((diff % 3600) / 60);
+            const seconds = diff % 60;
+
+            if (days > 0) {
+                setTimeLeft(`${days}d ${hours}h ${minutes}m`);
+            } else if (hours > 0) {
+                setTimeLeft(`${hours}h ${minutes}m ${seconds}s`);
+            } else if (minutes > 0) {
+                setTimeLeft(`${minutes}m ${seconds}s`);
+            } else {
+                setTimeLeft(`${seconds}s`);
+            }
+        };
+
+        updateCountdown();
+        const interval = setInterval(updateCountdown, 1000);
+        return () => clearInterval(interval);
+    }, [expiresAt]);
+
+    const now = Math.floor(Date.now() / 1000);
+    const expiry = Number(expiresAt);
+    const isExpired = expiry <= now;
+    const isUrgent = expiry - now < 3600; // Less than 1 hour
+
+    return (
+        <span className={isExpired ? "text-destructive font-medium" : isUrgent ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground"}>
+            ⏱️ {timeLeft}
+        </span>
+    );
+}
+
+interface NotificationsSectionProps {
+    prefetchedItems: PendingApprovalItem[];
+    prefetchLoading: boolean;
+    onRefresh: () => Promise<void>;
+}
+
+function NotificationsSection({ prefetchedItems, prefetchLoading, onRefresh }: NotificationsSectionProps) {
+    const { approveProposal, loading: approveLoading } = useApproveProposal();
+    const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+
+    // Listen for on-chain approval events and refresh when detected
+    useEffect(() => {
+        const program = getReadOnlyProgram();
+        let listenerHandle: number | null = null;
+
+        const setupEventListener = async () => {
+            try {
+                // Listen for GovernanceProposalApproved events
+                listenerHandle = program.addEventListener(
+                    "GovernanceProposalApproved",
+                    (event: any) => {
+                        console.log("🔔 Approval detected on-chain:", event);
+                        // Refresh notifications when any approval happens
+                        onRefresh();
+                        setLastUpdate(new Date());
+                    }
+                );
+            } catch (err) {
+                console.error("Failed to setup event listener:", err);
+            }
+        };
+
+        setupEventListener();
+
+        return () => {
+            if (listenerHandle !== null) {
+                program.removeEventListener(listenerHandle);
+            }
+        };
+    }, [onRefresh]);
+
+    const handleApprove = useCallback(async (item: PendingApprovalItem) => {
+        try {
+            const tx = await approveProposal(item.multisigPda, item.proposalPda);
+            toast.success("Proposal approved!", { description: `Tx: ${tx.slice(0, 16)}…` });
+            // Event listener will auto-refresh when approval lands on-chain
+        } catch (err) {
+            const { title, description } = parseError(err);
+            toast.error(title, { description });
+        }
+    }, [approveProposal]);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Proposal Notifications</CardTitle>
+                <CardDescription>
+                    Pending proposals requiring your approval across registered multisigs.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{prefetchedItems.length} pending</Badge>
+                        <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                            🔗 Event-driven sync
+                        </Badge>
+                        {lastUpdate && (
+                            <span className="text-xs text-muted-foreground">
+                                Updated {lastUpdate.toLocaleTimeString()}
+                            </span>
+                        )}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={onRefresh} disabled={prefetchLoading}>
+                        {prefetchLoading ? "Refreshing…" : "Manual Refresh"}
+                    </Button>
+                </div>
+
+                {prefetchedItems.length === 0 ? (
+                    <div className="rounded-md border p-4 text-sm text-muted-foreground">
+                        {prefetchLoading ? "Loading proposals..." : "No pending proposals for your wallet."}
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {prefetchedItems.map((item) => (
+                            <div key={item.proposalPda.toBase58()} className="rounded-md border p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="text-sm font-medium">Proposal #{item.nonce.toString()} • {item.actionLabel}</div>
+                                    <Badge variant="outline">
+                                        {item.approvalCount}/{item.threshold} approvals
+                                    </Badge>
+                                </div>
+                                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                    <div className="font-mono break-all">Authority: {item.multisigAuthority}</div>
+                                    <div className="font-mono break-all">Proposer: {item.proposer.toBase58()}</div>
+                                    <div>{new Date(Number(item.createdAt) * 1000).toLocaleString()} • threshold {item.threshold}/{item.adminCount}</div>
+                                    <div className="flex items-center gap-1">
+                                        <span>Expires:</span>
+                                        <ExpiryCountdown expiresAt={item.expiresAt} />
+                                    </div>
+                                </div>
+                                <div className="mt-3">
+                                    <Button size="sm" onClick={() => handleApprove(item)} disabled={approveLoading}>
+                                        {approveLoading ? "Approving…" : "Approve"}
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
 function GovernanceSection({ adminKey }: { adminKey: string }) {
     const { publicKey } = useWallet();
     const { createProposal, loading: createLoading } = useCreateProposal();
@@ -602,7 +964,7 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
     const { executeProposal, loading: executeLoading } = useExecuteProposal();
     const { transitionPhase, loading: transitionLoading } = usePhaseTransition();
     const { publishTallyRoot, loading: publishLoading } = usePublishTallyRoot();
-    const { election, refetch: refetchElection } = useElectionAccount(adminKey);
+    const { election, electionPda, candidates, refetch: refetchElection } = useElectionAccount(adminKey);
 
     // Create proposal form
     const [msAuthority, setMsAuthority] = useState("");
@@ -646,9 +1008,21 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
     // Publish Tally Root
     const [tallyRootHex, setTallyRootHex] = useState("");
     const [proofUri, setProofUri] = useState("");
+    const { upload: uploadProof, loading: uploadingProof, error: proofUploadError } = useUploadProof({
+        onSuccess: (ipfsHash, uri) => {
+            setProofUri(uri);
+            toast.success("Proof uploaded to IPFS!", {
+                description: `Hash: ${ipfsHash.slice(0, 20)}…`
+            });
+        },
+        onError: (error) => {
+            toast.error("Proof upload failed", { description: error });
+        },
+    });
 
     // For transition, use the same nonce as the proposal
     const transNonce = proposalNonceInput;
+
 
     // ── Auto-fetch proposal status when authority + nonce are set ──
     const {
@@ -945,10 +1319,21 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                 <Input
                     value={msAuthority}
                     onChange={(e) => setMsAuthority(e.target.value)}
-                    placeholder="Multisig authority public key"
+                    placeholder="Enter multisig authority public key"
                     className="font-mono text-xs"
                 />
+                <p className="text-xs text-muted-foreground">
+                    Use the Notifications tab for automatic proposal discovery and approvals.
+                </p>
             </div>
+
+            {multisig && multisig.threshold < multisig.adminCount && (
+                <Alert>
+                    <AlertDescription>
+                        Current multisig threshold is {multisig.threshold}/{multisig.adminCount}. Proposal execution does not require all admins.
+                    </AlertDescription>
+                </Alert>
+            )}
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -967,12 +1352,15 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             </div>
 
             {/* Live proposal status */}
-            <ProposalStatusCard
-                proposal={proposal}
-                proposalPda={proposalPda}
-                loading={proposalLoading}
-                error={proposalError}
-            />
+            <div id="proposal-details">
+                <ProposalStatusCard
+                    proposal={proposal}
+                    proposalPda={proposalPda}
+                    loading={proposalLoading}
+                    error={proposalError}
+                    multisig={multisig}
+                />
+            </div>
 
             <Separator />
 
@@ -1067,7 +1455,26 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
             <Card>
                 <CardHeader>
                     <CardTitle>Approve & Execute</CardTitle>
-                    {proposal && (
+                    {multisig && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                            Multisig: {multisig.adminCount} admins, threshold {multisig.threshold}
+                        </div>
+                    )}
+                    {proposal && multisig && (
+                        <CardDescription>
+                            {proposal.executed && proposal.consumed
+                                ? "This proposal has already been executed and consumed."
+                                : proposal.executed
+                                    ? "This proposal has been executed. Ready to be consumed."
+                                    : (() => {
+                                        const remaining = multisig.threshold - proposal.approvalCount;
+                                        return remaining > 0
+                                            ? `${proposal.approvalCount}/${multisig.threshold} approvals. Need ${remaining} more to execute.`
+                                            : `✓ Threshold reached (${proposal.approvalCount}/${multisig.threshold}). Ready to execute!`;
+                                    })()}
+                        </CardDescription>
+                    )}
+                    {proposal && !multisig && (
                         <CardDescription>
                             {proposal.executed && proposal.consumed
                                 ? "This proposal has already been executed and consumed."
@@ -1087,7 +1494,7 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                     </Button>
                     <Button
                         onClick={handleExecute}
-                        disabled={executeLoading || proposal?.executed === true}
+                        disabled={executeLoading || proposal?.executed === true || Boolean(multisig && proposal && proposal.approvalCount < multisig.threshold)}
                     >
                         {executeLoading ? "Executing…" : "Execute Proposal"}
                     </Button>
@@ -1118,12 +1525,53 @@ function GovernanceSection({ adminKey }: { adminKey: string }) {
                             </div>
                             <div className="space-y-2">
                                 <Label>Proof URI</Label>
-                                <Input
-                                    value={proofUri}
-                                    onChange={(e) => setProofUri(e.target.value)}
-                                    placeholder="ipfs://... or https://..."
-                                />
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={proofUri}
+                                        onChange={(e) => setProofUri(e.target.value)}
+                                        placeholder="ipfs://... or https://..."
+                                        readOnly={uploadingProof}
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        onClick={async () => {
+                                            if (!election || !electionPda || !candidates) {
+                                                toast.error("Election not loaded");
+                                                return;
+                                            }
+                                            if (!tallyRootHex) {
+                                                toast.error("Enter tally root first");
+                                                return;
+                                            }
+                                            try {
+                                                await uploadProof(
+                                                    electionPda,
+                                                    candidates.map((c) => ({
+                                                        pubkey: new PublicKey(c.election),
+                                                        name: c.name,
+                                                        votes: Number(c.revealedVotes ?? 0),
+                                                    })),
+                                                    tallyRootHex
+                                                );
+                                            } catch (err) {
+                                                console.error("Upload error:", err);
+                                            }
+                                        }}
+                                        disabled={uploadingProof || !election}
+                                        size="sm"
+                                    >
+                                        {uploadingProof ? "Uploading…" : "Generate & Upload"}
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Click "Generate & Upload" to create proof JSON and upload to Pinata IPFS
+                                </p>
                             </div>
+                            {proofUploadError && (
+                                <Alert variant="destructive">
+                                    <AlertDescription>{proofUploadError}</AlertDescription>
+                                </Alert>
+                            )}
                             <p className="text-xs text-muted-foreground">
                                 Note: Uses the "Proposal Nonce" value from above ({proposalNonceInput})
                             </p>

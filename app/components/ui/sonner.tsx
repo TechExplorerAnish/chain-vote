@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -7,16 +8,37 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  const [isDark, setIsDark] = useState(false)
+
+  useEffect(() => {
+    const root = document.documentElement
+    const syncTheme = () => setIsDark(root.classList.contains("dark"))
+
+    syncTheme()
+    const observer = new MutationObserver(syncTheme)
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] })
+
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={(isDark ? "dark" : "light") as ToasterProps["theme"]}
       className="toaster group"
+      toastOptions={{
+        classNames: {
+          toast:
+            "group toast group-[.toaster]:border-border group-[.toaster]:bg-popover group-[.toaster]:text-popover-foreground group-[.toaster]:shadow-md",
+          description: "group-[.toast]:text-muted-foreground",
+          actionButton:
+            "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
+          cancelButton:
+            "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+        },
+      }}
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,

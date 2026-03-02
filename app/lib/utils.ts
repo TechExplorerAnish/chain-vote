@@ -26,6 +26,18 @@ export function parseError(err: unknown): { title: string; description: string }
 
     // Parse Anchor AnchorError
     if (message.includes("AnchorError")) {
+      if (message.includes("InvalidTimeRange")) {
+        return {
+          title: "Invalid Time Range",
+          description: "End time must be after start time.",
+        };
+      }
+      if (message.includes("ProposalNotExecutable")) {
+        return {
+          title: "Proposal Not Ready",
+          description: "The proposal hasn't reached the approval threshold yet. Get more admin approvals before executing.",
+        };
+      }
       if (message.includes("InvalidActionHash")) {
         return {
           title: "Invalid Action Hash",
