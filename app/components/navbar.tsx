@@ -13,7 +13,7 @@ const WalletButton = dynamic(() => import("@/components/wallet-button"), {
 const NAV_ITEMS = [
     { href: "/", label: "Home" },
     { href: "/admin", label: "Admin" },
-    { href: "/documentation", label: "Documentation" },
+    { href: "/about", label: "About" },
 ];
 
 export default function Navbar() {
