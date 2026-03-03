@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMultisigRegistry } from "@/hooks/use-multisig-registry";
-import { getMultisigPda, getProposalPda } from "@/lib/pda";
-import { getReadOnlyProgram } from "@/lib/program";
+import { getMultisigPda, getProposalPda, getElectionPda } from "@/lib/pda";
+import { getReadOnlyProgram, getProgram, getProvider } from "@/lib/program";
 import { ShieldCheck, Bell, Vote, Scale, UserPlus, Users, Settings } from "lucide-react";
+import { useAnchorWallet } from "@solana/wallet-adapter-react";
+import { GovernanceAction, ElectionPhase } from "@/lib/types";
 
 import { MultisigSection } from "@/components/admin/multisig-section";
 import { ElectionSection } from "@/components/admin/election-section";
@@ -138,6 +140,14 @@ export default function AdminPage() {
 
                     if (alreadyApproved || executed || consumed) continue;
 
+                    const actionType = parseActionType(proposal.action);
+                    let targetPhase: ElectionPhase | undefined;
+
+                    // For TransitionPhase proposals, try to infer target phase
+                    if (actionType === GovernanceAction.TransitionPhase) {
+                        targetPhase = await inferTargetPhase(ms.authority);
+                    }
+
                     pending.push({
                         multisigAuthority: ms.authority,
                         multisigPda,
@@ -147,6 +157,8 @@ export default function AdminPage() {
                         nonce: BigInt((proposal.nonce as { toString(): string }).toString()),
                         proposer: proposal.proposer as PublicKey,
                         actionLabel: parseActionLabel(proposal.action),
+                        actionType,
+                        targetPhase,
                         approvalCount: proposal.approvalCount as number,
                         createdAt: BigInt((proposal.createdAt as { toString(): string }).toString()),
                         expiresAt: BigInt((proposal.expiresAt as { toString(): string }).toString()),
@@ -325,4 +337,61 @@ function parseActionLabel(actionObj: unknown): string {
         if ("publishTallyRoot" in actionObj) return "Publish Tally Root";
     }
     return "Unknown";
+}
+
+function parseActionType(actionObj: unknown): GovernanceAction | undefined {
+    if (typeof actionObj === "number") {
+        if (actionObj >= 0 && actionObj <= 2) return actionObj as GovernanceAction;
+    }
+    if (actionObj && typeof actionObj === "object") {
+        if ("initializeElection" in actionObj) return GovernanceAction.InitializeElection;
+        if ("transitionPhase" in actionObj) return GovernanceAction.TransitionPhase;
+        if ("publishTallyRoot" in actionObj) return GovernanceAction.PublishTallyRoot;
+    }
+    return undefined;
+}
+
+/**
+ * Infer the target phase for a TransitionPhase proposal by fetching the current election phase.
+ * Returns undefined if it can't be determined.
+ */
+async function inferTargetPhase(adminKey: string): Promise<ElectionPhase | undefined> {
+    try {
+        const program = getReadOnlyProgram();
+        const [electionPda] = getElectionPda(new PublicKey(adminKey));
+        const election = await program.account.election.fetch(electionPda);
+        const currentPhase = parsePhaseFromAnchor(election.phase);
+
+        // Determine next valid phase based on current phase
+        const nextPhaseMap: Record<ElectionPhase, ElectionPhase> = {
+            [ElectionPhase.Created]: ElectionPhase.RegistrationPhase,
+            [ElectionPhase.RegistrationPhase]: ElectionPhase.VotingPhase,
+            [ElectionPhase.VotingPhase]: ElectionPhase.RevealPhase,
+            [ElectionPhase.RevealPhase]: ElectionPhase.Finalized,
+            [ElectionPhase.Finalized]: ElectionPhase.Finalized, // No further transitions
+        };
+
+        return nextPhaseMap[currentPhase];
+    } catch {
+        return undefined;
+    }
+}
+
+function parsePhaseFromAnchor(phaseObj: unknown): ElectionPhase {
+    // Handle numeric phase values (0-4)
+    if (typeof phaseObj === "number") {
+        if (phaseObj >= 0 && phaseObj <= 4) return phaseObj as ElectionPhase;
+    }
+
+    // Handle discriminated union objects
+    if (typeof phaseObj === "object" && phaseObj !== null) {
+        const keys = Object.keys(phaseObj);
+        if (keys.includes("created")) return ElectionPhase.Created;
+        if (keys.includes("registrationPhase")) return ElectionPhase.RegistrationPhase;
+        if (keys.includes("votingPhase")) return ElectionPhase.VotingPhase;
+        if (keys.includes("revealPhase")) return ElectionPhase.RevealPhase;
+        if (keys.includes("finalized")) return ElectionPhase.Finalized;
+    }
+
+    return ElectionPhase.Created;
 }
