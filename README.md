@@ -80,7 +80,9 @@ Results: Tamper-proof tally with IPFS proof
 
 ## 🎥 Demo Video
 
-> **📹 Watch 3-minute demo**: [YouTube Link](#) _(coming soon)_
+> **📹 Watch 3-minute demo**: [Google Drive Video](https://drive.google.com/file/d/1kPgCze_oUHqI-3lovAV9Ogq3QVCCg5q-/view?usp=sharing)
+>
+> **🔗 LinkedIn Post**: [Solana MP4 Demo Post](https://www.linkedin.com/posts/anish-ghimire-18bb85292_solanamp4-activity-7434661858441162752-aeYz)
 
 **What the demo shows:**
 1. Admin creates election with multisig governance
@@ -105,6 +107,28 @@ Results: Tamper-proof tally with IPFS proof
 2. Connect Solana devnet wallet (Phantom/Solflare)
 3. Get devnet SOL from [Solana Faucet](https://faucet.solana.com/)
 4. Explore admin dashboard or vote on test election
+
+---
+
+## 🔐 Authentication Model (Judge Information)
+
+This app supports **two authentication modes** for hackathon/demo usability.
+
+### 1) Wallet Authentication (Primary Security)
+- Used for real blockchain governance actions.
+- Admin proposals and approvals are validated **on-chain** using multisig authorization.
+- This is the core and trusted security model.
+
+### 2) Password Authentication (Demo Convenience Only)
+- A judge PIN is provided for demonstration flows where judge wallet public keys are not pre-registered.
+- This helps evaluators quickly access the admin demo panel.
+- This mode is **not** the source of blockchain trust; smart-contract checks still happen on-chain for governance transactions.
+
+### Judge Access Notes
+- If you are evaluating the demo, use the provided **Judge PIN** from the deployment section above.
+- For full governance testing, connect a devnet wallet and perform wallet-based flows.
+
+> ⚠️ **Production Plan:** Password-based access is temporary and will be removed in production. The final production deployment will use full wallet-based authentication only.
 
 ---
 
@@ -247,7 +271,7 @@ anchor test --skip-local-validator
 **Anish** - Full-stack Solana Developer  
 📧 Email: your.email@example.com  
 🐦 Twitter: [@yourhandle](#)  
-💼 LinkedIn: [Your Profile](#)
+💼 LinkedIn: [Anish Ghimire](https://www.linkedin.com/posts/anish-ghimire-18bb85292_solanamp4-activity-7434661858441162752-aeYz)
 
 ---
 
@@ -274,7 +298,8 @@ MIT License - see [LICENSE](LICENSE) file
 | Resource | Link |
 |----------|------|
 | **Live App** | [chain-vote-peach.vercel.app](https://chain-vote-peach.vercel.app) |
-| **Demo Video** | [YouTube](#) _(coming soon)_ |
+| **Demo Video** | [Google Drive](https://drive.google.com/file/d/1kPgCze_oUHqI-3lovAV9Ogq3QVCCg5q-/view?usp=sharing) |
+| **LinkedIn Demo Post** | [View Post](https://www.linkedin.com/posts/anish-ghimire-18bb85292_solanamp4-activity-7434661858441162752-aeYz) |
 | **Technical Docs** | [TECHNICAL_DOCS.md](TECHNICAL_DOCS.md) |
 | **Solana Explorer** | [Program Account](https://explorer.solana.com/address/9JHuSg8vw8JNZ8RpyugiPejCSeY77uVs9ghRTfLe57cg?cluster=devnet) |
 | **Anchor Docs** | [anchor-lang.com](https://www.anchor-lang.com/) |
