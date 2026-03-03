@@ -9,6 +9,7 @@ import Countdown from "@/components/countdown";
 import type { ElectionAccount } from "@/lib/types";
 import { ElectionPhase } from "@/lib/types";
 import { useRegisteredVoters } from "@/hooks/use-registered-voters";
+import { convertIpfsToHttp } from "./results-table";
 
 interface Props {
     election: ElectionAccount;
@@ -98,12 +99,12 @@ export default function ElectionOverview({ election, electionPda }: Props) {
                         <div className="flex items-center gap-2 text-sm">
                             <Badge variant="outline">Proof</Badge>
                             <a
-                                href={election.proofUri}
+                                href={convertIpfsToHttp(election.proofUri)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="truncate underline underline-offset-4"
                             >
-                                {election.proofUri}
+                                {convertIpfsToHttp(election.proofUri)}
                             </a>
                         </div>
                     </>

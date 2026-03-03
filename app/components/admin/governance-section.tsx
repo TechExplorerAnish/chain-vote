@@ -604,6 +604,132 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
                         </>
                     )}
 
+                    {parseInt(actionType, 10) === GovernanceAction.PublishTallyRoot && (
+                        <>
+                            <Alert className="border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/20">
+                                <AlertCircle className="h-4 w-4 text-blue-600" />
+                                <AlertDescription>
+                                    <strong>Step 1:</strong> Click "📊 Calculate from Results" to generate tally root from current vote counts.
+                                </AlertDescription>
+                            </Alert>
+
+                            <div className="space-y-2">
+                                <Label>Tally Root (hex, 64 chars)</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={tallyRootHex}
+                                        onChange={(e) => setTallyRootHex(e.target.value.trim())}
+                                        placeholder="0000000000000000000000000000000000000000000000000000000000000000"
+                                        className="font-mono text-xs"
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        onClick={async () => {
+                                            if (!candidates || candidates.length === 0) {
+                                                toast.error("No candidates loaded");
+                                                return;
+                                            }
+                                            try {
+                                                const candidateData = candidates
+                                                    .map((c, idx) => `${idx}:${c.name}:${Number(c.revealedVotes ?? 0)}`)
+                                                    .join("|");
+
+                                                const encoder = new TextEncoder();
+                                                const data = encoder.encode(candidateData);
+                                                const hashBuffer = await crypto.subtle.digest("SHA-256", data as BufferSource);
+                                                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                                                const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+
+                                                setTallyRootHex(hashHex);
+                                                toast.success("Tally root calculated!", {
+                                                    description: `From ${candidates.length} candidates`
+                                                });
+                                            } catch (err) {
+                                                const errorMsg = parseError(err);
+                                                toast.error(`Failed to calculate tally root: ${errorMsg}`);
+                                            }
+                                        }}
+                                        size="sm"
+                                        className="whitespace-nowrap"
+                                    >
+                                        📊 Calculate
+                                    </Button>
+                                </div>
+                                {tallyRootHex && (
+                                    <div className="text-xs text-muted-foreground">
+                                        ✓ Valid: {tallyRootHex.length}/64 chars
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Proof URI</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={proofUri}
+                                        onChange={(e) => setProofUri(e.target.value)}
+                                        placeholder="ipfs://... or https://..."
+                                        disabled={uploadingProof}
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        onClick={async () => {
+                                            if (!election || !electionPda || !candidates) {
+                                                toast.error("Election not loaded");
+                                                return;
+                                            }
+                                            if (!tallyRootHex) {
+                                                toast.error("Calculate tally root first");
+                                                return;
+                                            }
+                                            if (tallyRootHex.length !== 64) {
+                                                toast.error("Invalid tally root length", { description: "Must be exactly 64 hex characters" });
+                                                return;
+                                            }
+                                            try {
+                                                await uploadProof(
+                                                    electionPda,
+                                                    candidates.map((c) => ({
+                                                        pubkey: new PublicKey(c.election),
+                                                        name: c.name,
+                                                        votes: Number(c.revealedVotes ?? 0),
+                                                    })),
+                                                    tallyRootHex
+                                                );
+                                            } catch (err) {
+                                                console.error("Upload error:", err);
+                                            }
+                                        }}
+                                        disabled={uploadingProof || !election || !tallyRootHex}
+                                        size="sm"
+                                        className="whitespace-nowrap"
+                                    >
+                                        {uploadingProof ? "Uploading…" : "📤 Upload"}
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Upload to IPFS for verifiable proof
+                                </p>
+                            </div>
+
+                            {proofUri && (
+                                <Alert className="border-green-200 dark:border-green-900 bg-green-50/30 dark:bg-green-950/20">
+                                    <AlertCircle className="h-4 w-4 text-green-600" />
+                                    <AlertDescription>
+                                        <strong>✓ Ready!</strong> Both tally root and proof URI are set. You can now create the proposal.
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
+                            {proofUploadError && (
+                                <Alert variant="destructive">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertDescription>{proofUploadError}</AlertDescription>
+                                </Alert>
+                            )}
+                        </>
+                    )}
+
                     <div className="space-y-2">
                         <Label>Expiry (hours)</Label>
                         <Input
@@ -613,7 +739,7 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
                         />
                     </div>
 
-                    <Button onClick={handleCreateProposal} disabled={createLoading}>
+                    <Button onClick={handleCreateProposal} disabled={createLoading} size="lg">
                         <Send className="mr-2 h-4 w-4" />
                         {createLoading ? "Creating…" : "Create Proposal"}
                     </Button>
@@ -708,15 +834,66 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                            <Alert className="border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/20">
+                                <AlertCircle className="h-4 w-4 text-blue-600" />
+                                <AlertDescription>
+                                    <strong>Tally Root:</strong> A 64-character hexadecimal string (32 bytes) representing the root hash of all election results.
+                                    <br />
+                                    Click <strong>"Calculate from Results"</strong> to auto-generate from current candidate vote counts.
+                                </AlertDescription>
+                            </Alert>
+
                             <div className="space-y-2">
                                 <Label>Tally Root (hex, 64 chars)</Label>
-                                <Input
-                                    value={tallyRootHex}
-                                    onChange={(e) => setTallyRootHex(e.target.value)}
-                                    placeholder="0000000000000000000000000000000000000000000000000000000000000000"
-                                    className="font-mono text-xs"
-                                />
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={tallyRootHex}
+                                        onChange={(e) => setTallyRootHex(e.target.value.trim())}
+                                        placeholder="0000000000000000000000000000000000000000000000000000000000000000"
+                                        className="font-mono text-xs"
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        onClick={async () => {
+                                            if (!candidates || candidates.length === 0) {
+                                                toast.error("No candidates loaded");
+                                                return;
+                                            }
+                                            try {
+                                                // Calculate hash from candidates' revealed votes
+                                                const candidateData = candidates
+                                                    .map((c, idx) => `${idx}:${c.name}:${Number(c.revealedVotes ?? 0)}`)
+                                                    .join("|");
+
+                                                // Create a deterministic hash from candidate data
+                                                const encoder = new TextEncoder();
+                                                const data = encoder.encode(candidateData);
+                                                const hashBuffer = await crypto.subtle.digest("SHA-256", data as BufferSource);
+                                                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                                                const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+
+                                                setTallyRootHex(hashHex);
+                                                toast.success("Tally root calculated!", {
+                                                    description: `From ${candidates.length} candidates`
+                                                });
+                                            } catch (err) {
+                                                const errorMsg = parseError(err);
+                                                toast.error(`Failed to calculate tally root: ${errorMsg}`);
+                                            }
+                                        }}
+                                        size="sm"
+                                        className="whitespace-nowrap"
+                                    >
+                                        📊 Calculate from Results
+                                    </Button>
+                                </div>
+                                {tallyRootHex && (
+                                    <div className="text-xs text-muted-foreground">
+                                        ✓ Valid hex: {tallyRootHex.length}/64 chars
+                                    </div>
+                                )}
                             </div>
+
                             <div className="space-y-2">
                                 <Label>Proof URI</Label>
                                 <div className="flex gap-2">
@@ -734,7 +911,11 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
                                                 return;
                                             }
                                             if (!tallyRootHex) {
-                                                toast.error("Enter tally root first");
+                                                toast.error("Calculate tally root first");
+                                                return;
+                                            }
+                                            if (tallyRootHex.length !== 64) {
+                                                toast.error("Invalid tally root length", { description: "Must be exactly 64 hex characters" });
                                                 return;
                                             }
                                             try {
@@ -751,30 +932,44 @@ export function GovernanceSection({ adminKey, onProposalChanged }: { adminKey: s
                                                 console.error("Upload error:", err);
                                             }
                                         }}
-                                        disabled={uploadingProof || !election}
+                                        disabled={uploadingProof || !election || !tallyRootHex}
                                         size="sm"
                                     >
-                                        {uploadingProof ? "Uploading…" : "Generate & Upload"}
+                                        {uploadingProof ? "Uploading…" : "📤 Upload Proof"}
                                     </Button>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                    Click "Generate & Upload" to create proof JSON and upload to Pinata IPFS
+                                    Upload proof JSON to IPFS. This generates a verifiable record of the tally.
                                 </p>
                             </div>
+
                             {proofUploadError && (
                                 <Alert variant="destructive">
                                     <AlertCircle className="h-4 w-4" />
                                     <AlertDescription>{proofUploadError}</AlertDescription>
                                 </Alert>
                             )}
+
+                            {proofUri && (
+                                <Alert className="border-green-200 dark:border-green-900 bg-green-50/30 dark:bg-green-950/20">
+                                    <AlertCircle className="h-4 w-4 text-green-600" />
+                                    <AlertDescription>
+                                        <strong>Proof uploaded!</strong> Ready to publish tally root.
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
                             <p className="text-xs text-muted-foreground">
-                                Note: Uses the "Proposal Nonce" value from above ({proposalNonceInput})
+                                Uses proposal nonce: <span className="font-mono font-bold">{proposalNonceInput}</span>
                             </p>
+
                             <Button
                                 onClick={handlePublishTally}
-                                disabled={publishLoading}
+                                disabled={publishLoading || !tallyRootHex || !proofUri}
+                                size="lg"
+                                className="w-full"
                             >
-                                {publishLoading ? "Publishing…" : "Publish Tally Root"}
+                                {publishLoading ? "Publishing…" : "✓ Publish Tally Root"}
                             </Button>
                         </CardContent>
                     </Card>

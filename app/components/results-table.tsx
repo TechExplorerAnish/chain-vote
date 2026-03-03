@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { CandidateAccount, ElectionAccount } from "@/lib/types";
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from "recharts";
-import { BarChart3, PieChart as PieChartIcon, TrendingUp, Radar as RadarIcon } from "lucide-react";
+import { BarChart3, PieChart as PieChartIcon, TrendingUp, Radar as RadarIcon, Download, ExternalLink } from "lucide-react";
 
 interface Props {
     election: ElectionAccount;
@@ -33,8 +33,25 @@ const COLORS = [
     "#f97316", // orange
 ];
 
+// Convert ipfs:// URI to HTTP gateway URL
+export function convertIpfsToHttp(uri: string): string {
+    if (!uri) return "";
+    if (uri.startsWith("ipfs://")) {
+        // ipfs://QmXxx... -> https://ipfs.io/ipfs/QmXxx...
+        const hash = uri.replace("ipfs://", "");
+        return `https://ipfs.io/ipfs/${hash}`;
+    }
+    if (uri.startsWith("https://") || uri.startsWith("http://")) {
+        return uri;
+    }
+    // If it's just a hash, convert it
+    return `https://ipfs.io/ipfs/${uri}`;
+}
+
 export default function ResultsTable({ election, candidates }: Props) {
     const [activeTab, setActiveTab] = useState("table");
+    const [proofData, setProofData] = useState<unknown>(null);
+    const [loadingProof, setLoadingProof] = useState(false);
 
     const totalVotes = candidates.reduce(
         (sum, c) => sum + Number(c.revealedVotes),
@@ -64,6 +81,21 @@ export default function ResultsTable({ election, candidates }: Props) {
             votes: d.votes,
         };
     });
+
+    const proofUrl = convertIpfsToHttp(election.proofUri);
+
+    const loadProofData = async () => {
+        setLoadingProof(true);
+        try {
+            const response = await fetch(proofUrl);
+            const data = await response.json();
+            setProofData(data);
+        } catch (err) {
+            console.error("Failed to load proof:", err);
+        } finally {
+            setLoadingProof(false);
+        }
+    };
 
     return (
         <div className="space-y-4">
@@ -297,11 +329,11 @@ export default function ResultsTable({ election, candidates }: Props) {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <span>✓</span>
-                            Results Published
+                            Results Published & Verified
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-4 space-y-2">
+                    <CardContent className="space-y-4">
+                        <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-4 space-y-3">
                             <div>
                                 <span className="text-sm font-medium text-muted-foreground">Final Tally Root: </span>
                                 <span className="font-mono text-xs break-all text-green-700 dark:text-green-400">
@@ -311,19 +343,47 @@ export default function ResultsTable({ election, candidates }: Props) {
                                 </span>
                             </div>
                             {election.proofUri && (
-                                <div>
-                                    <span className="text-sm font-medium text-muted-foreground">Proof URI: </span>
-                                    <a
-                                        href={election.proofUri}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-sm text-green-600 dark:text-green-400 underline break-all"
-                                    >
-                                        View on IPFS
-                                    </a>
+                                <div className="space-y-2">
+                                    <span className="text-sm font-medium text-muted-foreground">Proof of Results:</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        <a
+                                            href={proofUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition-colors"
+                                        >
+                                            <ExternalLink className="h-4 w-4" />
+                                            View Proof
+                                        </a>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={loadProofData}
+                                            disabled={loadingProof}
+                                            className="border-green-200 hover:bg-green-50 dark:border-green-900 dark:hover:bg-green-950/50"
+                                        >
+                                            <Download className="h-4 w-4 mr-2" />
+                                            {loadingProof ? "Loading…" : "Download JSON"}
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        IPFS Hash: <span className="font-mono">{election.proofUri.split("/").pop()}</span>
+                                    </p>
                                 </div>
                             )}
                         </div>
+
+                        {proofData ? (
+                            <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/20 p-4 space-y-2">
+                                <p className="text-sm font-medium">✓ Proof Loaded</p>
+                                <details className="text-xs text-muted-foreground">
+                                    <summary className="cursor-pointer font-medium">View Proof Data</summary>
+                                    <pre className="mt-2 p-2 bg-muted rounded overflow-auto max-h-48 text-xs break-words whitespace-pre-wrap">
+                                        {JSON.stringify(proofData, null, 2)}
+                                    </pre>
+                                </details>
+                            </div>
+                        ) : null}
                     </CardContent>
                 </Card>
             )}

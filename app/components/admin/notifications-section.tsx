@@ -7,10 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useApproveProposal } from "@/hooks/use-admin";
-import { getReadOnlyProgram } from "@/lib/program";
+import { getReadOnlyProgram, getProgram, getProvider } from "@/lib/program";
 import { parseError } from "@/lib/utils";
 import { ExpiryCountdown } from "./proposal-status-card";
 import { Bell, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { getMultisigPda, getProposalPda, getElectionPda } from "@/lib/pda";
+import { GovernanceAction, ElectionPhase, PHASE_LABELS } from "@/lib/types";
 
 export interface PendingApprovalItem {
     multisigAuthority: string;
@@ -21,6 +24,8 @@ export interface PendingApprovalItem {
     nonce: bigint;
     proposer: PublicKey;
     actionLabel: string;
+    actionType?: GovernanceAction;
+    targetPhase?: ElectionPhase;
     approvalCount: number;
     createdAt: bigint;
     expiresAt: bigint;
@@ -56,17 +61,17 @@ export function NotificationsSection({ prefetchedItems, prefetchLoading, onRefre
         const setupEventListener = async () => {
             try {
                 listenerHandles.push(
-                    await program.addEventListener("GovernanceProposalCreated", () => {
+                    program.addEventListener("GovernanceProposalCreated", () => {
                         refreshWithRetry();
                     })
                 );
                 listenerHandles.push(
-                    await program.addEventListener("GovernanceProposalApproved", () => {
+                    program.addEventListener("GovernanceProposalApproved", () => {
                         refreshWithRetry();
                     })
                 );
                 listenerHandles.push(
-                    await program.addEventListener("GovernanceProposalExecuted", () => {
+                    program.addEventListener("GovernanceProposalExecuted", () => {
                         refreshWithRetry();
                     })
                 );
@@ -88,7 +93,15 @@ export function NotificationsSection({ prefetchedItems, prefetchLoading, onRefre
     const handleApprove = useCallback(async (item: PendingApprovalItem) => {
         try {
             const tx = await approveProposal(item.multisigPda, item.proposalPda);
-            toast.success("Proposal approved!", { description: `Tx: ${tx.slice(0, 16)}…` });
+
+            // Build approval message with phase info if available
+            let description = `Tx: ${tx.slice(0, 16)}…`;
+            if (item.actionType === GovernanceAction.TransitionPhase && item.targetPhase !== undefined) {
+                const phaseName = PHASE_LABELS[item.targetPhase];
+                description = `Transitioning to: ${phaseName}. Tx: ${tx.slice(0, 16)}…`;
+            }
+
+            toast.success("Proposal approved!", { description });
             // Optimistic refresh now; event listeners + retry will keep it consistent.
             await onRefresh();
             setLastUpdate(new Date());
@@ -140,11 +153,18 @@ export function NotificationsSection({ prefetchedItems, prefetchLoading, onRefre
                         {prefetchedItems.map((item) => (
                             <div key={item.proposalPda.toBase58()} className="rounded-lg border border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20 p-3 transition-colors hover:bg-amber-100/50 dark:hover:bg-amber-900/30">
                                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <Badge className="bg-purple-600 hover:bg-purple-700 text-xs font-semibold">
                                             #{item.nonce.toString()}
                                         </Badge>
-                                        <span className="text-sm font-semibold text-amber-900 dark:text-amber-100">{item.actionLabel}</span>
+                                        <span className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                                            {item.actionLabel}
+                                        </span>
+                                        {item.actionType === GovernanceAction.TransitionPhase && item.targetPhase !== undefined && (
+                                            <Badge variant="default" className="bg-cyan-600 hover:bg-cyan-700 text-xs">
+                                                → {PHASE_LABELS[item.targetPhase]}
+                                            </Badge>
+                                        )}
                                     </div>
                                     <Badge variant="secondary" className="text-xs">
                                         {item.approvalCount}/{item.threshold} ✓
