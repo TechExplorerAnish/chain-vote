@@ -1,0 +1,2143 @@
+{
+  "address": "9JHuSg8vw8JNZ8RpyugiPejCSeY77uVs9ghRTfLe57cg",
+  "metadata": {
+    "name": "chain_vote",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "add_candidate",
+      "discriminator": [
+        172,
+        34,
+        30,
+        247,
+        165,
+        210,
+        224,
+        164
+      ],
+      "accounts": [
+        {
+          "name": "election",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "admin"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candidate",
+          "writable": true
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "election"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "party",
+          "type": "string"
+        },
+        {
+          "name": "index",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "approve_governance_proposal",
+      "discriminator": [
+        89,
+        187,
+        101,
+        178,
+        43,
+        235,
+        1,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "multisig"
+        },
+        {
+          "name": "proposal",
+          "writable": true
+        },
+        {
+          "name": "approver",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cast_vote",
+      "discriminator": [
+        20,
+        212,
+        15,
+        189,
+        69,
+        180,
+        69,
+        151
+      ],
+      "accounts": [
+        {
+          "name": "election",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "election.admin",
+                "account": "Election"
+              }
+            ]
+          }
+        },
+        {
+          "name": "voter_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "election"
+              },
+              {
+                "kind": "account",
+                "path": "voter"
+              }
+            ]
+          }
+        },
+        {
+          "name": "whitelist_entry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  104,
+                  105,
+                  116,
+                  101,
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "election"
+              },
+              {
+                "kind": "account",
+                "path": "voter"
+              }
+            ]
+          }
+        },
+        {
+          "name": "voter",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "nonce",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_governance_proposal",
+      "discriminator": [
+        102,
+        90,
+        114,
+        133,
+        147,
+        63,
+        113,
+        168
+      ],
+      "accounts": [
+        {
+          "name": "multisig",
+          "writable": true
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "action",
+          "type": {
+            "defined": {
+              "name": "GovernanceAction"
+            }
+          }
+        },
+        {
+          "name": "action_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        },
+        {
+          "name": "init_election_title",
+          "type": "string"
+        },
+        {
+          "name": "init_election_start_time",
+          "type": "i64"
+        },
+        {
+          "name": "init_election_end_time",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "execute_governance_proposal",
+      "discriminator": [
+        54,
+        81,
+        227,
+        205,
+        134,
+        185,
+        125,
+        80
+      ],
+      "accounts": [
+        {
+          "name": "multisig"
+        },
+        {
+          "name": "proposal",
+          "writable": true
+        },
+        {
+          "name": "executor",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_election",
+      "discriminator": [
+        59,
+        166,
+        191,
+        126,
+        195,
+        0,
+        153,
+        168
+      ],
+      "accounts": [
+        {
+          "name": "election",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "admin"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig_authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig"
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig_authority",
+          "signer": true
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_nonce",
+          "type": "u64"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "start_time",
+          "type": "i64"
+        },
+        {
+          "name": "end_time",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_multisig",
+      "discriminator": [
+        220,
+        130,
+        117,
+        21,
+        27,
+        227,
+        78,
+        213
+      ],
+      "accounts": [
+        {
+          "name": "multisig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "admins",
+          "type": {
+            "vec": "pubkey"
+          }
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "publish_tally_root",
+      "discriminator": [
+        247,
+        230,
+        50,
+        43,
+        121,
+        205,
+        43,
+        16
+      ],
+      "accounts": [
+        {
+          "name": "election",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "admin"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig",
+          "relations": [
+            "election"
+          ]
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig"
+              },
+              {
+                "kind": "arg",
+                "path": "_proposal_nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "election"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_nonce",
+          "type": "u64"
+        },
+        {
+          "name": "tally_root",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "proof_uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "register_voter",
+      "discriminator": [
+        229,
+        124,
+        185,
+        99,
+        118,
+        51,
+        226,
+        6
+      ],
+      "accounts": [
+        {
+          "name": "election",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "admin"
+              }
+            ]
+          }
+        },
+        {
+          "name": "whitelist_entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  104,
+                  105,
+                  116,
+                  101,
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "election"
+              },
+              {
+                "kind": "arg",
+                "path": "voter_pubkey"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "election"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "voter_pubkey",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "reveal_results",
+      "discriminator": [
+        111,
+        149,
+        62,
+        162,
+        102,
+        204,
+        225,
+        166
+      ],
+      "accounts": [
+        {
+          "name": "election",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "admin"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candidate"
+        },
+        {
+          "name": "multisig",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig_authority"
+              }
+            ]
+          },
+          "relations": [
+            "election"
+          ]
+        },
+        {
+          "name": "multisig_authority",
+          "signer": true
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "election"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "candidate_index",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "reveal_vote",
+      "discriminator": [
+        100,
+        157,
+        139,
+        17,
+        186,
+        75,
+        185,
+        149
+      ],
+      "accounts": [
+        {
+          "name": "election",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "election.admin",
+                "account": "Election"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candidate",
+          "writable": true
+        },
+        {
+          "name": "voter_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  111,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "election"
+              },
+              {
+                "kind": "account",
+                "path": "voter"
+              }
+            ]
+          }
+        },
+        {
+          "name": "whitelist_entry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  104,
+                  105,
+                  116,
+                  101,
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "election"
+              },
+              {
+                "kind": "account",
+                "path": "voter"
+              }
+            ]
+          }
+        },
+        {
+          "name": "voter",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "candidate_index",
+          "type": "u8"
+        },
+        {
+          "name": "salt",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "transition_election_phase",
+      "discriminator": [
+        251,
+        197,
+        149,
+        170,
+        218,
+        117,
+        85,
+        176
+      ],
+      "accounts": [
+        {
+          "name": "election",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "admin"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig_authority"
+              }
+            ]
+          },
+          "relations": [
+            "election"
+          ]
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig"
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig_authority",
+          "signer": true
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "election"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "next_phase",
+          "type": {
+            "defined": {
+              "name": "ElectionPhase"
+            }
+          }
+        },
+        {
+          "name": "proposal_nonce",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "AdminMultisig",
+      "discriminator": [
+        119,
+        16,
+        144,
+        23,
+        23,
+        147,
+        25,
+        220
+      ]
+    },
+    {
+      "name": "Candidate",
+      "discriminator": [
+        86,
+        69,
+        250,
+        96,
+        193,
+        10,
+        222,
+        123
+      ]
+    },
+    {
+      "name": "Election",
+      "discriminator": [
+        68,
+        191,
+        164,
+        85,
+        35,
+        105,
+        152,
+        202
+      ]
+    },
+    {
+      "name": "GovernanceProposal",
+      "discriminator": [
+        53,
+        107,
+        240,
+        190,
+        43,
+        73,
+        65,
+        143
+      ]
+    },
+    {
+      "name": "VoterRecord",
+      "discriminator": [
+        178,
+        96,
+        138,
+        116,
+        143,
+        202,
+        115,
+        33
+      ]
+    },
+    {
+      "name": "WhitelistEntry",
+      "discriminator": [
+        51,
+        70,
+        173,
+        81,
+        219,
+        192,
+        234,
+        62
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "CandidateRegistered",
+      "discriminator": [
+        61,
+        233,
+        168,
+        175,
+        31,
+        89,
+        126,
+        159
+      ]
+    },
+    {
+      "name": "ElectionInitialized",
+      "discriminator": [
+        37,
+        189,
+        176,
+        51,
+        214,
+        101,
+        230,
+        247
+      ]
+    },
+    {
+      "name": "ElectionPhaseTransitioned",
+      "discriminator": [
+        151,
+        207,
+        128,
+        196,
+        23,
+        213,
+        245,
+        202
+      ]
+    },
+    {
+      "name": "FinalTallyRootCommitted",
+      "discriminator": [
+        111,
+        41,
+        189,
+        128,
+        79,
+        77,
+        190,
+        245
+      ]
+    },
+    {
+      "name": "GovernanceProposalApproved",
+      "discriminator": [
+        64,
+        7,
+        151,
+        23,
+        231,
+        66,
+        35,
+        145
+      ]
+    },
+    {
+      "name": "GovernanceProposalCreated",
+      "discriminator": [
+        149,
+        102,
+        52,
+        29,
+        155,
+        69,
+        219,
+        208
+      ]
+    },
+    {
+      "name": "GovernanceProposalExecuted",
+      "discriminator": [
+        24,
+        181,
+        202,
+        130,
+        83,
+        126,
+        222,
+        26
+      ]
+    },
+    {
+      "name": "MultisigInitialized",
+      "discriminator": [
+        241,
+        144,
+        246,
+        160,
+        145,
+        47,
+        157,
+        212
+      ]
+    },
+    {
+      "name": "ResultsPublished",
+      "discriminator": [
+        33,
+        196,
+        78,
+        202,
+        48,
+        234,
+        70,
+        236
+      ]
+    },
+    {
+      "name": "VoteCommitted",
+      "discriminator": [
+        74,
+        67,
+        158,
+        48,
+        168,
+        230,
+        217,
+        77
+      ]
+    },
+    {
+      "name": "VoteRevealed",
+      "discriminator": [
+        104,
+        162,
+        140,
+        194,
+        213,
+        217,
+        117,
+        179
+      ]
+    },
+    {
+      "name": "VoterRegistered",
+      "discriminator": [
+        184,
+        179,
+        209,
+        46,
+        125,
+        60,
+        51,
+        197
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "VotingNotStarted",
+      "msg": "Voting has not started yet"
+    },
+    {
+      "code": 6001,
+      "name": "VotingClosed",
+      "msg": "Voting is closed"
+    },
+    {
+      "code": 6002,
+      "name": "VotingStillOngoing",
+      "msg": "Voting is still ongoing"
+    },
+    {
+      "code": 6003,
+      "name": "VotingAlreadyStarted",
+      "msg": "Voting has already started"
+    },
+    {
+      "code": 6004,
+      "name": "StartTimeInPast",
+      "msg": "Start time cannot be in the past"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidTimeRange",
+      "msg": "End time must be after start time"
+    },
+    {
+      "code": 6006,
+      "name": "UnauthorizedAccess",
+      "msg": "Unauthorized access"
+    },
+    {
+      "code": 6007,
+      "name": "NotWhitelisted",
+      "msg": "Wallet is not whitelisted"
+    },
+    {
+      "code": 6008,
+      "name": "AlreadyVoted",
+      "msg": "Wallet has already voted"
+    },
+    {
+      "code": 6009,
+      "name": "CandidateNotFound",
+      "msg": "Candidate not found"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidCandidateIndex",
+      "msg": "Candidate index must match the current candidate count"
+    },
+    {
+      "code": 6011,
+      "name": "AlreadyRevealed",
+      "msg": "Results have already been revealed"
+    },
+    {
+      "code": 6012,
+      "name": "CandidateAccountMissing",
+      "msg": "A required candidate account was not provided"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidElectionState",
+      "msg": "Invalid election state"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidPhaseTransition",
+      "msg": "Invalid election phase transition"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidCommitment",
+      "msg": "Invalid vote commitment"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidNonce",
+      "msg": "Invalid nonce"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidMultisigConfig",
+      "msg": "Invalid multisig configuration"
+    },
+    {
+      "code": 6018,
+      "name": "ProposalExpired",
+      "msg": "Governance proposal has expired"
+    },
+    {
+      "code": 6019,
+      "name": "ProposalAlreadyApproved",
+      "msg": "Signer has already approved this proposal"
+    },
+    {
+      "code": 6020,
+      "name": "ProposalNotExecutable",
+      "msg": "Proposal has not reached threshold"
+    },
+    {
+      "code": 6021,
+      "name": "ProposalConsumed",
+      "msg": "Proposal already consumed"
+    },
+    {
+      "code": 6022,
+      "name": "InvalidGovernanceAction",
+      "msg": "Invalid governance action"
+    },
+    {
+      "code": 6023,
+      "name": "InvalidActionHash",
+      "msg": "Invalid governance action hash"
+    },
+    {
+      "code": 6024,
+      "name": "MissingFinalTallyRoot",
+      "msg": "Final tally root not committed"
+    },
+    {
+      "code": 6025,
+      "name": "UnrevealedVotesRemaining",
+      "msg": "Not all committed votes are revealed"
+    },
+    {
+      "code": 6026,
+      "name": "TitleTooLong",
+      "msg": "Election title is too long"
+    },
+    {
+      "code": 6027,
+      "name": "NameTooLong",
+      "msg": "Candidate name is too long"
+    },
+    {
+      "code": 6028,
+      "name": "PartyNameTooLong",
+      "msg": "Party name is too long"
+    },
+    {
+      "code": 6029,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "AdminMultisig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admins",
+            "type": {
+              "array": [
+                "pubkey",
+                5
+              ]
+            }
+          },
+          {
+            "name": "admin_count",
+            "type": "u8"
+          },
+          {
+            "name": "threshold",
+            "type": "u8"
+          },
+          {
+            "name": "proposal_nonce",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Candidate",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "party",
+            "type": "string"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "encrypted_votes",
+            "type": "u64"
+          },
+          {
+            "name": "revealed_votes",
+            "type": "u64"
+          },
+          {
+            "name": "is_revealed",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CandidateRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "candidate",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Election",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "multisig",
+            "type": "pubkey"
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "title",
+            "type": "string"
+          },
+          {
+            "name": "start_time",
+            "type": "i64"
+          },
+          {
+            "name": "end_time",
+            "type": "i64"
+          },
+          {
+            "name": "phase",
+            "type": {
+              "defined": {
+                "name": "ElectionPhase"
+              }
+            }
+          },
+          {
+            "name": "candidate_count",
+            "type": "u8"
+          },
+          {
+            "name": "total_committed_votes",
+            "type": "u64"
+          },
+          {
+            "name": "total_revealed_votes",
+            "type": "u64"
+          },
+          {
+            "name": "final_tally_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "final_tally_root_set",
+            "type": "bool"
+          },
+          {
+            "name": "proof_uri",
+            "type": "string"
+          },
+          {
+            "name": "is_revealed",
+            "type": "bool"
+          },
+          {
+            "name": "revealed_at",
+            "type": "i64"
+          },
+          {
+            "name": "finalized_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ElectionInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "start_time",
+            "type": "i64"
+          },
+          {
+            "name": "end_time",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ElectionPhase",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Created"
+          },
+          {
+            "name": "RegistrationPhase"
+          },
+          {
+            "name": "VotingPhase"
+          },
+          {
+            "name": "RevealPhase"
+          },
+          {
+            "name": "Finalized"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ElectionPhaseTransitioned",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "previous_phase",
+            "type": {
+              "defined": {
+                "name": "ElectionPhase"
+              }
+            }
+          },
+          {
+            "name": "next_phase",
+            "type": {
+              "defined": {
+                "name": "ElectionPhase"
+              }
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FinalTallyRootCommitted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "tally_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proof_uri",
+            "type": "string"
+          },
+          {
+            "name": "total_revealed_votes",
+            "type": "u64"
+          },
+          {
+            "name": "total_committed_votes",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceAction",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "InitializeElection"
+          },
+          {
+            "name": "TransitionPhase"
+          },
+          {
+            "name": "PublishTallyRoot"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceProposal",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "multisig",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposer",
+            "type": "pubkey"
+          },
+          {
+            "name": "action",
+            "type": {
+              "defined": {
+                "name": "GovernanceAction"
+              }
+            }
+          },
+          {
+            "name": "action_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "init_election_title",
+            "type": "string"
+          },
+          {
+            "name": "init_election_start_time",
+            "type": "i64"
+          },
+          {
+            "name": "init_election_end_time",
+            "type": "i64"
+          },
+          {
+            "name": "has_init_election_payload",
+            "type": "bool"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "approvals",
+            "type": {
+              "array": [
+                "bool",
+                5
+              ]
+            }
+          },
+          {
+            "name": "approval_count",
+            "type": "u8"
+          },
+          {
+            "name": "executed",
+            "type": "bool"
+          },
+          {
+            "name": "consumed",
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceProposalApproved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal",
+            "type": "pubkey"
+          },
+          {
+            "name": "approver",
+            "type": "pubkey"
+          },
+          {
+            "name": "approval_count",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceProposalCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "multisig",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposal",
+            "type": "pubkey"
+          },
+          {
+            "name": "action",
+            "type": {
+              "defined": {
+                "name": "GovernanceAction"
+              }
+            }
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "proposer",
+            "type": "pubkey"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceProposalExecuted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal",
+            "type": "pubkey"
+          },
+          {
+            "name": "executor",
+            "type": "pubkey"
+          },
+          {
+            "name": "action_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MultisigInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "multisig",
+            "type": "pubkey"
+          },
+          {
+            "name": "admin_count",
+            "type": "u8"
+          },
+          {
+            "name": "threshold",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ResultsPublished",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "candidate",
+            "type": "pubkey"
+          },
+          {
+            "name": "candidate_index",
+            "type": "u8"
+          },
+          {
+            "name": "candidate_votes",
+            "type": "u64"
+          },
+          {
+            "name": "total_candidates",
+            "type": "u8"
+          },
+          {
+            "name": "phase",
+            "type": {
+              "defined": {
+                "name": "ElectionPhase"
+              }
+            }
+          },
+          {
+            "name": "final_tally_root_set",
+            "type": "bool"
+          },
+          {
+            "name": "final_tally_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proof_uri",
+            "type": "string"
+          },
+          {
+            "name": "published_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VoteCommitted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "voter",
+            "type": "pubkey"
+          },
+          {
+            "name": "commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VoteRevealed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "voter",
+            "type": "pubkey"
+          },
+          {
+            "name": "candidate",
+            "type": "pubkey"
+          },
+          {
+            "name": "candidate_index",
+            "type": "u8"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VoterRecord",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "voter",
+            "type": "pubkey"
+          },
+          {
+            "name": "commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "has_committed",
+            "type": "bool"
+          },
+          {
+            "name": "has_revealed",
+            "type": "bool"
+          },
+          {
+            "name": "committed_at",
+            "type": "i64"
+          },
+          {
+            "name": "revealed_at",
+            "type": "i64"
+          },
+          {
+            "name": "candidate_index",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VoterRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "voter",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WhitelistEntry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "election",
+            "type": "pubkey"
+          },
+          {
+            "name": "voter",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_active",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}
