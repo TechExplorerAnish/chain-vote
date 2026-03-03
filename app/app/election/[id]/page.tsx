@@ -44,30 +44,49 @@ export default function ElectionPage() {
 
     if (error || !election) {
         return (
-            <div className="mx-auto max-w-4xl p-6">
-                <Alert variant="destructive">
-                    <AlertDescription className="space-y-3">
-                        <div>
-                            <strong>⚠️ Election Not Found</strong>
+            <div className="mx-auto max-w-4xl space-y-6 p-6 min-h-screen">
+                <div className="pt-8"></div>
+                <Alert variant="destructive" className="border-destructive/50 flex">
+                    <AlertDescription className="space-y-4">
+                        <div className="flex items-start gap-2">
+                            <div className="text-2xl">⚠️</div>
+                            <div>
+                                <strong className="text-lg">Election Not Found</strong>
+                            </div>
                         </div>
-                        <div>
-                            {error || (
-                                <>
-                                    The election with ID{" "}
-                                    <code className="bg-red-100 dark:bg-red-900 px-2 py-1 rounded text-sm">
-                                        {adminKey?.slice(0, 8)}...
-                                    </code>{" "}
-                                    does not exist.
-                                </>
-                            )}
+                        <div className="border-t border-destructive/30 pt-4">
+                            <p>
+                                {error || (
+                                    <>
+                                        The election with ID{" "}
+                                        <code className="bg-red-100 dark:bg-red-900 px-2 py-1 rounded text-sm font-mono break-all">
+                                            {adminKey}
+                                        </code>{" "}
+                                        does not exist.
+                                    </>
+                                )}
+                            </p>
                         </div>
-                        <div className="text-sm opacity-90">
-                            <strong>Possible causes:</strong>
-                            <ul className="list-disc ml-5 mt-2 space-y-1">
-                                <li>The election ID might be incorrect</li>
+                        <div className="border-t border-destructive/30 pt-4">
+                            <strong className="block mb-2">Possible causes:</strong>
+                            <ul className="list-disc ml-5 space-y-1 text-sm">
+                                <li>The election ID might be incorrect or malformed</li>
                                 <li>The election may not have been initialized yet</li>
-                                <li>The election might be on a different network (Devnet/Mainnet)</li>
+                                <li>The election might be on a different network (Devnet vs Mainnet)</li>
+                                <li>The election PDA might not have been created</li>
                             </ul>
+                        </div>
+                        <div className="border-t border-destructive/30 pt-4">
+                            <p className="text-sm opacity-90">
+                                <strong>💡 Need help?</strong> Go back to{" "}
+                                <a href="/" className="underline hover:opacity-75">
+                                    search for an election
+                                </a>{" "}
+                                or visit the{" "}
+                                <a href="/about" className="underline hover:opacity-75">
+                                    documentation
+                                </a>.
+                            </p>
                         </div>
                     </AlertDescription>
                 </Alert>
