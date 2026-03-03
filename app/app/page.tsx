@@ -96,11 +96,20 @@ export default function Home() {
                   className="font-mono text-sm"
                   onKeyDown={(e) => e.key === "Enter" && handleLookup()}
                 />
+                <p className="text-xs text-muted-foreground">
+                  💡 Tip: Make sure the key is 44 characters long (base58 format)
+                </p>
               </div>
               <Button onClick={handleLookup} disabled={!adminKey.trim()} className="w-full">
                 <Search className="mr-2 h-4 w-4" />
                 View Election
               </Button>
+              <p className="text-xs text-muted-foreground border-t pt-3">
+                <strong>Not finding an election?</strong><br/>
+                • Check that you're on the correct network (Devnet)<br/>
+                • Verify the admin public key is correct<br/>
+                • The election must have been initialized first
+              </p>
             </CardContent>
           </Card>
         </section>

@@ -46,8 +46,29 @@ export default function ElectionPage() {
         return (
             <div className="mx-auto max-w-4xl p-6">
                 <Alert variant="destructive">
-                    <AlertDescription>
-                        {error ?? "Election not found. Check the admin public key."}
+                    <AlertDescription className="space-y-3">
+                        <div>
+                            <strong>⚠️ Election Not Found</strong>
+                        </div>
+                        <div>
+                            {error || (
+                                <>
+                                    The election with ID{" "}
+                                    <code className="bg-red-100 dark:bg-red-900 px-2 py-1 rounded text-sm">
+                                        {adminKey?.slice(0, 8)}...
+                                    </code>{" "}
+                                    does not exist.
+                                </>
+                            )}
+                        </div>
+                        <div className="text-sm opacity-90">
+                            <strong>Possible causes:</strong>
+                            <ul className="list-disc ml-5 mt-2 space-y-1">
+                                <li>The election ID might be incorrect</li>
+                                <li>The election may not have been initialized yet</li>
+                                <li>The election might be on a different network (Devnet/Mainnet)</li>
+                            </ul>
+                        </div>
                     </AlertDescription>
                 </Alert>
             </div>

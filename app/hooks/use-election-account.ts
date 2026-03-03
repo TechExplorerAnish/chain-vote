@@ -173,8 +173,22 @@ export function useElectionAccount(adminKey: string | undefined) {
             }
             setCandidates(candidateList);
         } catch (err) {
-            const message =
-                err instanceof Error ? err.message : "Failed to fetch election";
+            let message = "Failed to fetch election";
+            
+            if (err instanceof Error) {
+                message = err.message;
+                
+                // Handle Anchor "account not found" errors gracefully
+                if (
+                    message.includes("Account does not exist") ||
+                    message.includes("cannot find the requested account") ||
+                    message.includes("_bn") ||
+                    message.includes("undefined")
+                ) {
+                    message = `Election not found. Check that the admin public key is correct: ${adminKey}`;
+                }
+            }
+            
             setError(message);
             console.error("Election fetch error:", message);
         } finally {
