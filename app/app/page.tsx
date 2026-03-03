@@ -105,9 +105,9 @@ export default function Home() {
                 View Election
               </Button>
               <p className="text-xs text-muted-foreground border-t pt-3">
-                <strong>Not finding an election?</strong><br/>
-                • Check that you're on the correct network (Devnet)<br/>
-                • Verify the admin public key is correct<br/>
+                <strong>Not finding an election?</strong><br />
+                • Check that you're on the correct network (Devnet)<br />
+                • Verify the admin public key is correct<br />
                 • The election must have been initialized first
               </p>
             </CardContent>
