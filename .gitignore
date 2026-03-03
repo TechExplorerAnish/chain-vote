@@ -11,4 +11,3 @@ test-ledger
 wallet.json
 .env 
 .env.local
-/docs
