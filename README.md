@@ -269,9 +269,8 @@ anchor test --skip-local-validator
 ## 👨‍💻 Developer
 
 **Anish** - Full-stack Solana Developer  
-📧 Email: your.email@example.com  
-🐦 Twitter: [@yourhandle](#)  
-💼 LinkedIn: [Anish Ghimire](https://www.linkedin.com/posts/anish-ghimire-18bb85292_solanamp4-activity-7434661858441162752-aeYz)
+📧 Email: anishghimire178@gmail.com 
+💼 LinkedIn: [Anish Ghimire](https://www.linkedin.com/in/anish-ghimire-18bb85292/)
 
 ---
 
